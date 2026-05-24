@@ -13,7 +13,7 @@ export async function lookupExternalProduct(barcode: string): Promise<{ name: st
   return { name: 'Unknown Item' }
 }
 
-export async function callRemoveBg(imageBytes: ArrayBuffer): Promise<ArrayBuffer> {
+export async function callRemoveBg(imageBytes: ArrayBuffer | Buffer): Promise<ArrayBuffer> {
   const form = new FormData()
   form.append('image_file', new Blob([imageBytes], { type: 'image/jpeg' }), 'capture.jpg')
   form.append('size', 'auto')

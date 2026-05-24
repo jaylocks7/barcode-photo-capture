@@ -37,7 +37,7 @@ Read this section before any task.
 | Language | TypeScript (strict) | `typescript` |
 | Styling | Tailwind CSS v4 (Vite plugin) | `tailwindcss`, `@tailwindcss/vite` |
 | Hosting | Vercel | (no package — connect repo) |
-| Backend | Vercel serverless functions, Edge runtime | (no package) |
+| Backend | Vercel serverless functions, Node runtime | (no package) |
 | Data store | Redis (via `REDIS_URL` env var) | `redis` |
 | Image storage | AWS S3 | `aws4fetch` (Edge-compatible SigV4 signer) |
 | Barcode scan | ZXing | `@zxing/browser`, `@zxing/library` |
@@ -52,7 +52,7 @@ iOS Safari does not implement `BarcodeDetector` (confirmed on iOS 26). Use `@zxi
 
 ## 4. Environment variables
 
-All required. Set in Vercel project settings and in a local `.env.local` (gitignored).
+All required. Set in Vercel project settings and in a local `.env` (gitignored).
 
 | Name | Purpose |
 |---|---|
@@ -238,7 +238,7 @@ Cases 1 and 3 share the same capture loop after the first POST. Only difference:
 
 ## 9. API contract
 
-All routes use Vercel Edge runtime. All routes call `requireAuth(req)` first.
+All routes use Vercel Node runtime. All routes call `requireAuth(req)` first.
 
 ### 9.1 GET `/api/items/:barcode`
 
@@ -535,9 +535,9 @@ Execute tasks sequentially. Each task lists files touched and a success criterio
 **Success:** a Tailwind utility class on the default page (e.g. `<h1 className="text-3xl font-bold underline">`) renders as expected.
 
 ### Task 3 — Env vars and Redis
-**Files:** Vercel dashboard, `.env.local`
+**Files:** Vercel dashboard, `.env`
 **Do:**
-- Add `REDIS_URL` plus the remaining env vars (`APP_PASSWORD`, AWS keys, `S3_BUCKET`, `REMOVEBG_API_KEY`) to both Vercel project settings and `.env.local`.
+- Add `REDIS_URL` plus the remaining env vars (`APP_PASSWORD`, AWS keys, `S3_BUCKET`, `REMOVEBG_API_KEY`) to both Vercel project settings and `.env`.
 - Run `vercel env pull .env.local` (after `npm i -g vercel` and `vercel link`) to pull all env vars locally.
 - Install client: `npm install redis`
 **Success:** a one-off `tsx` script can `import { createClient } from 'redis'` and read/write a test key via `REDIS_URL`.
@@ -556,14 +556,14 @@ Execute tasks sequentially. Each task lists files touched and a success criterio
 
 ### Task 6 — GET endpoint
 **Files:** `api/items/[barcode].ts`
-**Do:** Edge runtime, implement per Section 9.1.
+**Do:** Node runtime, implement per Section 9.1.
 **Success:**
 - `curl -H "x-app-password: <pw>" .../api/items/038000138416` returns `{ exists: false, suggestion: {...} }`
 - Same curl with wrong header returns 401.
 
 ### Task 7 — POST endpoint
 **Files:** `api/items/[barcode]/photos.ts`
-**Do:** Edge runtime, implement per Section 9.2.
+**Do:** Node runtime, implement per Section 9.2.
 **Success:** `curl -F view=front -F image=@test.jpg -F name="Test Item" -H "x-app-password: <pw>" .../api/items/123/photos` returns a `processedUrl`; KV record contains both `photo_urls.front` and `raw_photo_urls.front`; S3 contains both `items/123/front-raw.jpg` and `items/123/front-processed.png`.
 
 ### Task 8 — Seed script
