@@ -1,0 +1,21 @@
+export type View = 'front' | 'back' | 'top';
+
+export type ItemRecord = {
+  barcode: string;
+  name: string;
+  needs_photos: boolean;            // derived at write time
+  required_views: View[];           // any subset of ["front", "back", "top"]
+  photo_urls: Partial<Record<View, string>>;     // view -> processed (bg-removed) S3 URL
+  raw_photo_urls: Partial<Record<View, string>>; // view -> raw (pre-processing) S3 URL
+  created_at: string;               // ISO 8601
+  updated_at: string;               // ISO 8601
+};
+
+export type GetItemResponse =
+  | { exists: true; item: ItemRecord }
+  | { exists: false; suggestion: { name: string } };
+
+export type PostPhotoResponse = {
+  processedUrl: string;
+  item: ItemRecord;
+};
