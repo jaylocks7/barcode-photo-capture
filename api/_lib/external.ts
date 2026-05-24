@@ -3,9 +3,9 @@ export async function lookupExternalProduct(barcode: string): Promise<{ name: st
     const res = await fetch(
       `https://api.barcodelookup.com/v3/products?barcode=${barcode}&formatted=y&key=${process.env.BARCODE_API_KEY}`
     )
-    const data = await res.json()
+    const data = await res.json() as { products?: { title: string }[] }
     if (data.products?.[0]?.title) {
-      return { name: data.products[0].title as string }
+      return { name: data.products[0].title }
     }
   } catch {
     // fall through to default
