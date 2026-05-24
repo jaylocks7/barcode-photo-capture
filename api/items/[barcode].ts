@@ -1,6 +1,6 @@
-import { requireAuth } from '../_lib/auth'
-import { getItem } from '../_lib/storage'
-import { lookupExternalProduct } from '../_lib/external'
+import { requireAuth } from '../_lib/auth.js'
+import { getItem } from '../_lib/storage.js'
+import { lookupExternalProduct } from '../_lib/external.js'
 
 export const config = { runtime: 'nodejs' }
 
