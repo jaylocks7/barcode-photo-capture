@@ -15,6 +15,7 @@ export default function ScannerScreen({ onScanResult }: Props) {
   const [loading, setLoading] = useState(false)
   const [manualBarcode, setManualBarcode] = useState('')
   const [completeBanner, setCompleteBanner] = useState<ItemRecord | null>(null)
+  const [debugBarcode, setDebugBarcode] = useState<string | null>(null)
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -56,6 +57,7 @@ export default function ScannerScreen({ onScanResult }: Props) {
 
   async function handleBarcode(barcode: string) {
     if (loading || completeBanner) return
+    setDebugBarcode(barcode)
     setLoading(true)
     try {
       const result = await getItem(barcode)
@@ -119,6 +121,12 @@ export default function ScannerScreen({ onScanResult }: Props) {
           </div>
         )}
       </div>
+
+      {debugBarcode && (
+        <div className="bg-yellow-100 px-4 py-2 text-xs font-mono text-center text-yellow-900">
+          last scan: {debugBarcode}
+        </div>
+      )}
 
       <div className="bg-white p-4">
         <form onSubmit={handleManualSubmit} className="flex gap-2">
