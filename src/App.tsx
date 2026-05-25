@@ -38,6 +38,7 @@ export default function App() {
   }
 
   function handlePhotoPosted(updatedItem: ItemRecord) {
+    if (!updatedItem) return
     setItem(updatedItem)
     setPendingName(null)
     const missing = updatedItem.required_views.filter(v => !(v in updatedItem.photo_urls))

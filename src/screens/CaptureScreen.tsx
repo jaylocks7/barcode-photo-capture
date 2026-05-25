@@ -79,11 +79,13 @@ export default function CaptureScreen({ barcode, item, pendingName, onPhotoPoste
     setIsProcessing(true)
     try {
       const result = await postPhoto(barcode, currentView, blob, pendingName ?? undefined)
-      onPhotoPosted(result.item)
-      retake(blobUrl)
+      if (result.item) {
+        onPhotoPosted(result.item)
+      }
     } catch {
       // ignore
     } finally {
+      retake(blobUrl)
       setIsProcessing(false)
     }
   }

@@ -41,6 +41,7 @@ export async function uploadToS3(params: {
   const bucket = process.env.S3_BUCKET!
   const region = process.env.AWS_REGION!
   const url = `https://${bucket}.s3.${region}.amazonaws.com/${params.key}`
+  console.log('S3 PUT', url)
   const res = await getAws().fetch(url, {
     method: 'PUT',
     body: params.body,
