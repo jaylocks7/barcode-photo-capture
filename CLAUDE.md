@@ -40,13 +40,13 @@ Read this section before any task.
 | Backend | Vercel serverless functions, Node runtime | (no package) |
 | Data store | Redis (via `REDIS_URL` env var) | `redis` |
 | Image storage | AWS S3 | `aws4fetch` (Edge-compatible SigV4 signer) |
-| Barcode scan | ZXing | `@zxing/browser`, `@zxing/library` |
+| Barcode scan | Quagga2 (1D barcodes only) | `@ericblade/quagga2` |
 | Camera capture | `getUserMedia` + `<video>` + `<canvas>` | (built-in) |
 | Background removal | remove.bg API | (HTTP, no SDK) |
 | External barcode lookup | Barcode Lookup API | (HTTP, no SDK) |
 | Blur detection | Laplacian variance | (custom, no package) |
 
-iOS Safari does not implement `BarcodeDetector` (confirmed on iOS 26). Use `@zxing/browser`.
+iOS Safari does not implement `BarcodeDetector` (confirmed on iOS 26). Use `@ericblade/quagga2` — it handles only 1D formats (EAN-13, EAN-8, UPC-A, UPC-E) which covers all CPG retail barcodes in scope for v1.
 
 ---
 

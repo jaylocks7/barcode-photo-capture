@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { BrowserMultiFormatReader } from '@zxing/browser'
-import { BarcodeFormat, DecodeHintType } from '@zxing/library'
+import Quagga from '@ericblade/quagga2'
+import type { QuaggaJSResultObject } from '@ericblade/quagga2'
 import { getItem } from '../lib/api'
 import type { GetItemResponse, ItemRecord } from '../types'
 
@@ -8,16 +8,8 @@ type Props = {
   onScanResult: (barcode: string, result: GetItemResponse) => void
 }
 
-const hints = new Map()
-hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-  BarcodeFormat.EAN_13,
-  BarcodeFormat.EAN_8,
-  BarcodeFormat.UPC_A,
-  BarcodeFormat.UPC_E,
-])
-
 export default function ScannerScreen({ onScanResult }: Props) {
-  const videoRef = useRef<HTMLVideoElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const lastBarcodeRef = useRef<string | null>(null)
   const handleBarcodeRef = useRef<(barcode: string) => void>(() => {})
   const [loading, setLoading] = useState(false)
@@ -25,23 +17,41 @@ export default function ScannerScreen({ onScanResult }: Props) {
   const [completeBanner, setCompleteBanner] = useState<ItemRecord | null>(null)
 
   useEffect(() => {
-    const reader = new BrowserMultiFormatReader(hints)
-    let stopFn: (() => void) | null = null
+    if (!containerRef.current) return
 
-    reader.decodeFromConstraints(
-      { video: { facingMode: 'environment' } },
-      videoRef.current!,
-      (result, _err) => {
-        if (!result) return
-        const text = result.getText()
-        if (text === lastBarcodeRef.current) return
-        lastBarcodeRef.current = text
-        handleBarcodeRef.current(text)
-        setTimeout(() => { lastBarcodeRef.current = null }, 3000)
+    Quagga.init(
+      {
+        inputStream: {
+          type: 'LiveStream',
+          target: containerRef.current,
+          constraints: { facingMode: 'environment' },
+        },
+        decoder: {
+          readers: ['ean_reader', 'ean_8_reader', 'upc_reader', 'upc_e_reader'],
+        },
+        locate: true,
+      },
+      (err) => {
+        if (err) { console.error('Quagga init error:', err); return }
+        Quagga.start()
       }
-    ).then(controls => { stopFn = () => controls.stop() })
+    )
 
-    return () => { stopFn?.() }
+    function onDetected(result: QuaggaJSResultObject) {
+      const code = result.codeResult.code
+      if (!code) return
+      if (code === lastBarcodeRef.current) return
+      lastBarcodeRef.current = code
+      handleBarcodeRef.current(code)
+      setTimeout(() => { lastBarcodeRef.current = null }, 3000)
+    }
+
+    Quagga.onDetected(onDetected)
+
+    return () => {
+      Quagga.offDetected(onDetected)
+      Quagga.stop()
+    }
   }, [])
 
   async function handleBarcode(barcode: string) {
@@ -91,13 +101,18 @@ export default function ScannerScreen({ onScanResult }: Props) {
         </div>
       )}
 
-      <div className="relative flex-1">
-        <video
-          ref={videoRef}
-          className="absolute inset-0 w-full h-full object-cover"
-          playsInline
-          muted
-        />
+      <div className="relative flex-1 overflow-hidden">
+        <style>{`
+          .quagga-container video {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+          }
+          .quagga-container canvas { display: none; }
+        `}</style>
+        <div ref={containerRef} className="quagga-container absolute inset-0" />
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/50">
             <span className="text-white text-lg">Looking up…</span>

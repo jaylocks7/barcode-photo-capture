@@ -10,8 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@zxing/browser": "^0.2.0",
-    "@zxing/library": "^0.22.0",
+    "@ericblade/quagga2": "^1.12.1",
     "aws4fetch": "^1.0.20",
     "busboy": "^1.6.0",
     "react": "^19.2.6",
