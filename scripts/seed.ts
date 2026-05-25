@@ -7,7 +7,7 @@ const PLACEHOLDER = 'https://placehold.co/300x300.png'
 
 const items: ItemRecord[] = [
   {
-    barcode: '096619926626',
+    barcode: '0096619926626',
     name: "Kirkland Fish Oil 1000mg",
     needs_photos: true,
     required_views: ['front', 'back', 'top'],
@@ -17,7 +17,7 @@ const items: ItemRecord[] = [
     updated_at: new Date().toISOString(),
   },
   {
-    barcode: '016500558415',
+    barcode: '0016500558415',
     name: 'One A Day Mens Multivitamin',
     needs_photos: false,
     required_views: ['front', 'back', 'top'],
@@ -27,7 +27,7 @@ const items: ItemRecord[] = [
     updated_at: new Date().toISOString(),
   },
   {
-    barcode: '012345678905',
+    barcode: '0012345678905',
     name: 'Coca-Cola Can 12oz',
     needs_photos: true,
     required_views: ['front', 'back', 'top'],
