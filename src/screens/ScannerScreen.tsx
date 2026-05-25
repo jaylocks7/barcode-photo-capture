@@ -10,6 +10,7 @@ type Props = {
 
 const hints = new Map()
 hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.UPC_A, BarcodeFormat.UPC_E])
+hints.set(DecodeHintType.TRY_HARDER, true)
 
 export default function ScannerScreen({ onScanResult }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -25,7 +26,7 @@ export default function ScannerScreen({ onScanResult }: Props) {
     let stopFn: (() => void) | null = null
 
     reader.decodeFromConstraints(
-      { video: { facingMode: 'environment' } },
+      { video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } },
       videoRef.current!,
       (result, _err) => {
         if (!result) return
