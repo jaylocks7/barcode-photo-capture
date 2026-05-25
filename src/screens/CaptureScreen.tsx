@@ -82,9 +82,14 @@ export default function CaptureScreen({ barcode, item, pendingName, onPhotoPoste
   async function submitPhoto(rawBlob: Blob, blobUrl: string) {
     setIsBlurry(false)
     setIsProcessing(true)
+
+    // Capture these now — they change once onPhotoPosted fires
+    const capturedView = currentView
+    const capturedName = pendingName
+
     try {
-      const processedBlob = await removeBackground(rawBlob)
-      const result = await postPhoto(barcode, currentView, rawBlob, processedBlob, pendingName ?? undefined)
+      // Post raw immediately so the UI advances to the next view without waiting for bg removal
+      const result = await postPhoto(barcode, capturedView, rawBlob, undefined, capturedName ?? undefined)
       if (result.item) {
         onPhotoPosted(result.item)
       }
@@ -94,6 +99,14 @@ export default function CaptureScreen({ barcode, item, pendingName, onPhotoPoste
       retake(blobUrl)
       setIsProcessing(false)
     }
+
+    // Background removal runs after the UI has already advanced.
+    // Re-posts with the processed image; calls onPhotoPosted again so App state
+    // (including SuccessScreen) gets updated with the cutout URL when ready.
+    removeBackground(rawBlob)
+      .then(processed => postPhoto(barcode, capturedView, rawBlob, processed))
+      .then(result => { if (result?.item) onPhotoPosted(result.item) })
+      .catch(() => {})
   }
 
   if (!currentView) return null
@@ -151,7 +164,7 @@ export default function CaptureScreen({ barcode, item, pendingName, onPhotoPoste
         )}
         {isProcessing && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/70">
-            <p className="text-white text-lg">Removing background…</p>
+            <p className="text-white text-lg">Uploading…</p>
           </div>
         )}
       </div>
