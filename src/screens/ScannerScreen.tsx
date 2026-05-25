@@ -71,7 +71,7 @@ export default function ScannerScreen({ onScanResult }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-black flex flex-col">
+    <div className="h-dvh bg-black flex flex-col">
       {completeBanner && (
         <div className="bg-white border-b border-gray-200 p-4">
           <div className="flex items-center justify-between mb-3">
@@ -94,7 +94,7 @@ export default function ScannerScreen({ onScanResult }: Props) {
       <div className="relative flex-1">
         <video
           ref={videoRef}
-          className="w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-cover"
           playsInline
           muted
         />
