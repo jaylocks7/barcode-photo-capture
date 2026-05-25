@@ -37,22 +37,9 @@ export default function ScannerScreen({ onScanResult }: Props) {
       }
     )
 
-    let consecutive: { code: string; count: number } | null = null
-
     function onDetected(result: QuaggaJSResultObject) {
       const code = result.codeResult.code
       if (!code) return
-
-      // Require 3 consecutive reads of the same code before firing —
-      // false positives from nearby 2D barcodes produce inconsistent values frame-to-frame
-      if (consecutive?.code === code) {
-        consecutive.count++
-      } else {
-        consecutive = { code, count: 1 }
-      }
-      if (consecutive.count < 3) return
-      consecutive = null
-
       if (code === lastBarcodeRef.current) return
       lastBarcodeRef.current = code
       handleBarcodeRef.current(code)
