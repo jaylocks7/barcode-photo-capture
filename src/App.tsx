@@ -3,7 +3,7 @@ import LoginScreen from './screens/LoginScreen'
 import ScannerScreen from './screens/ScannerScreen'
 import CaptureScreen from './screens/CaptureScreen'
 import SuccessScreen from './screens/SuccessScreen'
-import type { ItemRecord } from './types'
+import type { ItemRecord, GetItemResponse } from './types'
 
 type Screen = 'login' | 'scanner' | 'capture' | 'success'
 
@@ -20,16 +20,16 @@ export default function App() {
     setCurrentScreen('scanner')
   }
 
-  function handleScanResult(scannedBarcode: string, result: { exists: boolean; item?: ItemRecord; suggestion?: { name: string } }) {
+  function handleScanResult(scannedBarcode: string, result: GetItemResponse) {
     setBarcode(scannedBarcode)
-    if (result.exists && result.item) {
+    if (result.exists) {
       if (result.item.needs_photos) {
         setItem(result.item)
         setPendingName(null)
         setWasNewItem(false)
         setCurrentScreen('capture')
       }
-    } else if (!result.exists && result.suggestion) {
+    } else {
       setItem(null)
       setPendingName(result.suggestion.name)
       setWasNewItem(true)

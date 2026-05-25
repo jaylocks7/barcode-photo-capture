@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { BrowserMultiFormatReader, DecodeHintType } from '@zxing/browser'
-import { BarcodeFormat } from '@zxing/library'
+import { BrowserMultiFormatReader } from '@zxing/browser'
+import { BarcodeFormat, DecodeHintType } from '@zxing/library'
+import type { GetItemResponse } from '../types'
 
 type Props = {
-  onScanResult: (barcode: string, result: unknown) => void
+  onScanResult: (barcode: string, result: GetItemResponse) => void
 }
 
 const hints = new Map()
@@ -25,10 +26,12 @@ export default function ScannerScreen({ onScanResult: _onScanResult }: Props) {
     const reader = new BrowserMultiFormatReader(hints)
     readerRef.current = reader
 
+    let stopFn: (() => void) | null = null
+
     reader.decodeFromConstraints(
       { video: { facingMode: 'environment' } },
       videoRef.current!,
-      (result, err) => {
+      (result, _err) => {
         if (!result) return
         const text = result.getText()
         if (text === lastBarcodeRef.current) return
@@ -37,9 +40,9 @@ export default function ScannerScreen({ onScanResult: _onScanResult }: Props) {
         setLastScanned(text)
         setTimeout(() => { lastBarcodeRef.current = null }, 3000)
       }
-    )
+    ).then(controls => { stopFn = () => controls.stop() })
 
-    return () => { reader.reset() }
+    return () => { stopFn?.() }
   }, [])
 
   function handleManualSubmit(e: React.FormEvent) {
