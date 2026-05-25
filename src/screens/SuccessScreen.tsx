@@ -27,6 +27,7 @@ export default function SuccessScreen({ item, wasNewItem, onScanAnother }: Props
               <img
                 src={url}
                 alt={view}
+                crossOrigin="anonymous"
                 className="w-full aspect-square object-contain rounded-lg bg-gray-100"
               />
               <p className="text-sm text-gray-500 mt-1 capitalize">{view}</p>

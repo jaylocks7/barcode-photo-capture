@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { BrowserMultiFormatReader } from '@zxing/browser'
 import { BarcodeFormat, DecodeHintType } from '@zxing/library'
 import { getItem } from '../lib/api'
+import { preloadModel } from '../lib/removeBackground'
 import type { GetItemResponse, ItemRecord } from '../types'
 
 type Props = {
@@ -25,6 +26,8 @@ export default function ScannerScreen({ onScanResult }: Props) {
   const [manualBarcode, setManualBarcode] = useState('')
   const [completeBanner, setCompleteBanner] = useState<ItemRecord | null>(null)
   const [debugBarcode, setDebugBarcode] = useState<string | null>(null)
+
+  useEffect(() => { preloadModel() }, [])
 
   useEffect(() => {
     const reader = new BrowserMultiFormatReader(hints)
@@ -88,7 +91,7 @@ export default function ScannerScreen({ onScanResult }: Props) {
           </div>
           <div className="flex gap-2 overflow-x-auto">
             {Object.values(completeBanner.photo_urls).map((url, i) => (
-              <img key={i} src={url} className="h-20 w-20 object-contain rounded-lg bg-gray-50" />
+              <img key={i} src={url} crossOrigin="anonymous" className="h-20 w-20 object-contain rounded-lg bg-gray-50" />
             ))}
           </div>
         </div>

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { postPhoto } from '../lib/api'
 import { computeLaplacianVariance } from '../lib/blur'
 import { resizeCanvas } from '../lib/resize'
-import { removeBackground, canvasToPng } from '../lib/removeBackground'
+import { removeBackground } from '../lib/removeBackground'
 import type { ItemRecord, View } from '../types'
 
 type Props = {
@@ -75,16 +75,15 @@ export default function CaptureScreen({ barcode, item, pendingName, onPhotoPoste
     if (variance < 100) {
       setIsBlurry(true)
     } else {
-      await submitPhoto(blob, url, resized)
+      await submitPhoto(blob, url)
     }
   }
 
-  async function submitPhoto(rawBlob: Blob, blobUrl: string, canvas: HTMLCanvasElement) {
+  async function submitPhoto(rawBlob: Blob, blobUrl: string) {
     setIsBlurry(false)
     setIsProcessing(true)
     try {
-      const processedCanvas = removeBackground(canvas)
-      const processedBlob = await canvasToPng(processedCanvas)
+      const processedBlob = await removeBackground(rawBlob)
       const result = await postPhoto(barcode, currentView, rawBlob, processedBlob, pendingName ?? undefined)
       if (result.item) {
         onPhotoPosted(result.item)
