@@ -27,7 +27,7 @@ export default function ScannerScreen({ onScanResult }: Props) {
           constraints: { facingMode: 'environment' },
         },
         decoder: {
-          readers: ['ean_reader', 'ean_8_reader', 'upc_reader', 'upc_e_reader'],
+          readers: ['upc_reader', 'upc_e_reader'],
         },
         locate: true,
       },
@@ -43,14 +43,14 @@ export default function ScannerScreen({ onScanResult }: Props) {
       const code = result.codeResult.code
       if (!code) return
 
-      // Require 2 consecutive reads of the same code before firing —
+      // Require 3 consecutive reads of the same code before firing —
       // false positives from nearby 2D barcodes produce inconsistent values frame-to-frame
       if (consecutive?.code === code) {
         consecutive.count++
       } else {
         consecutive = { code, count: 1 }
       }
-      if (consecutive.count < 2) return
+      if (consecutive.count < 3) return
       consecutive = null
 
       if (code === lastBarcodeRef.current) return
