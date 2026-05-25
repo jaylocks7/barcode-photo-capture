@@ -104,6 +104,7 @@ All required. Set in Vercel project settings and in a local `.env` (gitignored).
 - Per-category photo requirements (all new items require `["front", "back", "top"]` in v1)
 - Confirmation pop-up for Case 1 (item in DB, needs photos): "Item is in DB, needs X photos — proceed?" with Yes/No. Yes routes to CaptureScreen, No returns focus to scanner.
 - Confirmation pop-up for Case 3 (item not in DB): "Item not found — proceed to capture?" with Yes/No. Yes routes to CaptureScreen, No returns focus to scanner.
+- Photo retake flow: (a) scanning a fully-complete item offers the option to recapture any view rather than just showing the banner; (b) during a partial capture session (e.g. item needs only top), cycle through already-captured views first and offer "Retake" or "Keep" before moving to the missing views.
 
 ---
 

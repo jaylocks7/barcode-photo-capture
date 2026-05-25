@@ -19,6 +19,7 @@ export default function CaptureScreen({ barcode, item, pendingName, onPhotoPoste
   const [capturedUrl, setCapturedUrl] = useState<string | null>(null)
   const [isBlurry, setIsBlurry] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [showTip, setShowTip] = useState(() => !sessionStorage.getItem('capture_tip_shown'))
 
   const missingViews: View[] = item
     ? (item.required_views.filter(v => !(v in item.photo_urls)) as View[])
@@ -116,19 +117,29 @@ export default function CaptureScreen({ barcode, item, pendingName, onPhotoPoste
         )}
         {isBlurry && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 gap-4 p-6">
-            <p className="text-white text-lg font-medium text-center">Image may be blurry</p>
-            <div className="flex gap-3">
+            <p className="text-white text-lg font-medium text-center">Image may be blurry — please retake</p>
+            <button
+              onClick={() => retake()}
+              className="bg-white text-gray-900 rounded-lg px-5 py-2 font-medium"
+            >
+              Retake
+            </button>
+          </div>
+        )}
+        {showTip && (
+          <div className="absolute inset-0 flex items-end bg-black/60 p-5">
+            <div className="bg-white rounded-2xl p-5 w-full">
+              <p className="font-semibold text-gray-900 mb-3">Tips for a great photo</p>
+              <ul className="text-sm text-gray-600 space-y-1 mb-4">
+                <li>• Center the item in frame</li>
+                <li>• Use a plain, non-busy background</li>
+                <li>• Make sure the item is in focus</li>
+              </ul>
               <button
-                onClick={() => retake()}
-                className="bg-white text-gray-900 rounded-lg px-5 py-2 font-medium"
+                onClick={() => { sessionStorage.setItem('capture_tip_shown', '1'); setShowTip(false) }}
+                className="w-full bg-blue-600 text-white rounded-xl py-2.5 font-medium"
               >
-                Retake
-              </button>
-              <button
-                onClick={() => { if (capturedBlob && capturedUrl) submitPhoto(capturedBlob, capturedUrl) }}
-                className="bg-blue-600 text-white rounded-lg px-5 py-2 font-medium"
-              >
-                Use Anyway
+                Got it
               </button>
             </div>
           </div>
@@ -140,7 +151,7 @@ export default function CaptureScreen({ barcode, item, pendingName, onPhotoPoste
         )}
       </div>
 
-      {!capturedBlob && (
+      {!capturedBlob && !showTip && (
         <div className="bg-black flex justify-center py-6">
           <button
             onClick={handleShutter}
