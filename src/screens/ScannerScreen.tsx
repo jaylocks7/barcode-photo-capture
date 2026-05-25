@@ -43,23 +43,14 @@ export default function ScannerScreen({ onScanResult }: Props) {
       const code = result.codeResult.code
       if (!code) return
 
-      // Reject low-confidence reads
-      const errors = result.codeResult.decodedCodes
-        .map(x => x.error)
-        .filter((e): e is number => e !== undefined)
-      if (errors.length > 0) {
-        const avgError = errors.reduce((a, b) => a + b, 0) / errors.length
-        if (avgError > 0.15) return
-      }
-
-      // Require 3 consecutive reads of the same code before firing —
+      // Require 2 consecutive reads of the same code before firing —
       // false positives from nearby 2D barcodes produce inconsistent values frame-to-frame
       if (consecutive?.code === code) {
         consecutive.count++
       } else {
         consecutive = { code, count: 1 }
       }
-      if (consecutive.count < 3) return
+      if (consecutive.count < 2) return
       consecutive = null
 
       if (code === lastBarcodeRef.current) return
