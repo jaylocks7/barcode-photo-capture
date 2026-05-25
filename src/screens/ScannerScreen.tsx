@@ -38,10 +38,19 @@ export default function ScannerScreen({ onScanResult }: Props) {
       }
     )
 
+    let lastSeen: string | null = null
+
     function onDetected(result: QuaggaJSResultObject) {
       const code = result.codeResult.code
       if (!code) return
       if (code === lastBarcodeRef.current) return
+
+      if (code !== lastSeen) {
+        lastSeen = code
+        return
+      }
+
+      lastSeen = null
       lastBarcodeRef.current = code
       handleBarcodeRef.current(code)
       setTimeout(() => { lastBarcodeRef.current = null }, 3000)
