@@ -9,7 +9,12 @@ type Props = {
 }
 
 const hints = new Map()
-hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.UPC_A, BarcodeFormat.UPC_E])
+hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+  BarcodeFormat.UPC_A,
+  BarcodeFormat.UPC_E,
+  BarcodeFormat.EAN_13,
+  BarcodeFormat.EAN_8,
+])
 hints.set(DecodeHintType.TRY_HARDER, true)
 
 export default function ScannerScreen({ onScanResult }: Props) {
