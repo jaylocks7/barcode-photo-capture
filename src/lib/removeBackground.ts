@@ -1,40 +1,23 @@
-// Background removal: hybrid Laplacian + color-distance flood fill.
+// Background removal: Laplacian edge barrier + adaptive region growing.
 //
-// Pure Laplacian flood fill breaks when a single high-contrast edge (e.g. barcode)
-// inflates maxLap, pushing the threshold so high that product boundary edges get
-// missed and the fill leaks into the product.
+// Fixed-color flood fill fails on multi-shade backgrounds (hand, wall, shadows) because
+// the single corner-sampled average can't represent all background regions.
 //
-// Hybrid approach:
-//   1. Estimate background color from the four corner regions.
-//   2. Use Laplacian edges as a secondary barrier (stops fill even when colors are similar).
-//   3. BFS expands only to pixels whose color matches the estimated background.
+// Adaptive approach: the fill checks each candidate pixel against the color of its
+// already-filled neighbor, not a global estimate. This lets it walk through gradual
+// color transitions (white wall → shadow → skin tone) as long as each step is locally
+// similar. The Laplacian edge barrier still stops it at sharp product boundaries.
 //
-// Works best on plain, low-texture backgrounds (which the capture tip already instructs).
+// T controls per-channel local step tolerance. Lower = stricter (may leave bg patches).
+// Higher = looser (may creep into product on gradual edges). Default: 40.
 
-export function removeBackground(source: HTMLCanvasElement): HTMLCanvasElement {
+export function removeBackground(source: HTMLCanvasElement, T = 40): HTMLCanvasElement {
   const w = source.width
   const h = source.height
   const ctx = source.getContext('2d')!
   const { data } = ctx.getImageData(0, 0, w, h)
 
-  // 1. Estimate background color from 15×15 corner regions
-  const CORNER = 15
-  let sumR = 0, sumG = 0, sumB = 0, count = 0
-  for (let y = 0; y < CORNER; y++) {
-    for (let x = 0; x < CORNER; x++) {
-      for (const [px, py] of [
-        [x, y], [w - 1 - x, y], [x, h - 1 - y], [w - 1 - x, h - 1 - y],
-      ] as [number, number][]) {
-        const i = (py * w + px) * 4
-        sumR += data[i]; sumG += data[i + 1]; sumB += data[i + 2]; count++
-      }
-    }
-  }
-  const bgR = sumR / count
-  const bgG = sumG / count
-  const bgB = sumB / count
-
-  // 2. Laplacian edge mask as a secondary fill barrier
+  // 1. Laplacian edge mask — barriers that stop the fill at product boundaries
   const gray = new Float32Array(w * h)
   for (let i = 0; i < w * h; i++) {
     gray[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2]
@@ -57,30 +40,28 @@ export function removeBackground(source: HTMLCanvasElement): HTMLCanvasElement {
     isEdge[i] = lapVals[i] > edgeThresh ? 1 : 0
   }
 
-  // Per-channel color match: pixel is background-like if R, G, B are each within T of bgColor.
-  // T=50 allows for lighting variation across the background while rejecting product colors.
-  const T = 70
-  function matchesBg(i: number): boolean {
-    return Math.abs(data[i * 4]     - bgR) < T &&
-           Math.abs(data[i * 4 + 1] - bgG) < T &&
-           Math.abs(data[i * 4 + 2] - bgB) < T
-  }
-
-  // 3. BFS flood fill: seed from border pixels that match background color,
-  //    expand through background-colored non-edge neighbors
+  // 2. Adaptive BFS: seed from all non-edge border pixels, expand to neighbors
+  //    whose color is within T of the current (already-filled) pixel's color.
+  //    This lets the fill traverse multi-shade backgrounds step by step.
   const isBg = new Uint8Array(w * h)
   const queue: number[] = []
 
   for (let x = 0; x < w; x++) {
-    if (matchesBg(x)) queue.push(x)
+    if (!isEdge[x]) queue.push(x)
     const bot = (h - 1) * w + x
-    if (matchesBg(bot)) queue.push(bot)
+    if (!isEdge[bot]) queue.push(bot)
   }
   for (let y = 1; y < h - 1; y++) {
     const left = y * w
     const right = y * w + w - 1
-    if (matchesBg(left)) queue.push(left)
-    if (matchesBg(right)) queue.push(right)
+    if (!isEdge[left]) queue.push(left)
+    if (!isEdge[right]) queue.push(right)
+  }
+
+  function colorClose(a: number, b: number): boolean {
+    return Math.abs(data[a * 4]     - data[b * 4])     < T &&
+           Math.abs(data[a * 4 + 1] - data[b * 4 + 1]) < T &&
+           Math.abs(data[a * 4 + 2] - data[b * 4 + 2]) < T
   }
 
   let qi = 0
@@ -90,13 +71,13 @@ export function removeBackground(source: HTMLCanvasElement): HTMLCanvasElement {
     isBg[idx] = 1
     const x = idx % w
     const y = (idx - x) / w
-    if (x > 0       && !isBg[idx - 1] && !isEdge[idx - 1] && matchesBg(idx - 1)) queue.push(idx - 1)
-    if (x < w - 1   && !isBg[idx + 1] && !isEdge[idx + 1] && matchesBg(idx + 1)) queue.push(idx + 1)
-    if (y > 0       && !isBg[idx - w] && !isEdge[idx - w] && matchesBg(idx - w)) queue.push(idx - w)
-    if (y < h - 1   && !isBg[idx + w] && !isEdge[idx + w] && matchesBg(idx + w)) queue.push(idx + w)
+    if (x > 0     && !isBg[idx - 1] && !isEdge[idx - 1] && colorClose(idx, idx - 1)) queue.push(idx - 1)
+    if (x < w - 1 && !isBg[idx + 1] && !isEdge[idx + 1] && colorClose(idx, idx + 1)) queue.push(idx + 1)
+    if (y > 0     && !isBg[idx - w] && !isEdge[idx - w] && colorClose(idx, idx - w)) queue.push(idx - w)
+    if (y < h - 1 && !isBg[idx + w] && !isEdge[idx + w] && colorClose(idx, idx + w)) queue.push(idx + w)
   }
 
-  // 4. Build output canvas: background → transparent, foreground → opaque
+  // 3. Build output canvas: background → transparent, foreground → opaque
   const out = document.createElement('canvas')
   out.width = w
   out.height = h
