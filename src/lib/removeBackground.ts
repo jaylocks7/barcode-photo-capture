@@ -59,7 +59,7 @@ export function removeBackground(source: HTMLCanvasElement): HTMLCanvasElement {
 
   // Per-channel color match: pixel is background-like if R, G, B are each within T of bgColor.
   // T=50 allows for lighting variation across the background while rejecting product colors.
-  const T = 50
+  const T = 70
   function matchesBg(i: number): boolean {
     return Math.abs(data[i * 4]     - bgR) < T &&
            Math.abs(data[i * 4 + 1] - bgG) < T &&
