@@ -19,6 +19,7 @@ hints.set(DecodeHintType.POSSIBLE_FORMATS, [
 export default function ScannerScreen({ onScanResult }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const lastBarcodeRef = useRef<string | null>(null)
+  const handleBarcodeRef = useRef<(barcode: string) => void>(() => {})
   const [loading, setLoading] = useState(false)
   const [manualBarcode, setManualBarcode] = useState('')
   const [completeBanner, setCompleteBanner] = useState<ItemRecord | null>(null)
@@ -35,7 +36,7 @@ export default function ScannerScreen({ onScanResult }: Props) {
         const text = result.getText()
         if (text === lastBarcodeRef.current) return
         lastBarcodeRef.current = text
-        handleBarcode(text)
+        handleBarcodeRef.current(text)
         setTimeout(() => { lastBarcodeRef.current = null }, 3000)
       }
     ).then(controls => { stopFn = () => controls.stop() })
@@ -59,6 +60,8 @@ export default function ScannerScreen({ onScanResult }: Props) {
       setLoading(false)
     }
   }
+
+  handleBarcodeRef.current = handleBarcode
 
   function handleManualSubmit(e: React.FormEvent) {
     e.preventDefault()

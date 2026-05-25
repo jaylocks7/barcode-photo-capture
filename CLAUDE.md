@@ -102,6 +102,8 @@ All required. Set in Vercel project settings and in a local `.env` (gitignored).
 - Analytics, logging beyond `console.log`, monitoring
 - Product category derivation from barcode scan
 - Per-category photo requirements (all new items require `["front", "back", "top"]` in v1)
+- Confirmation pop-up for Case 1 (item in DB, needs photos): "Item is in DB, needs X photos — proceed?" with Yes/No. Yes routes to CaptureScreen, No returns focus to scanner.
+- Confirmation pop-up for Case 3 (item not in DB): "Item not found — proceed to capture?" with Yes/No. Yes routes to CaptureScreen, No returns focus to scanner.
 
 ---
 
