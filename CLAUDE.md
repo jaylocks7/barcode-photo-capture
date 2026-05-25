@@ -40,13 +40,13 @@ Read this section before any task.
 | Backend | Vercel serverless functions, Node runtime | (no package) |
 | Data store | Redis (via `REDIS_URL` env var) | `redis` |
 | Image storage | AWS S3 | `aws4fetch` (Edge-compatible SigV4 signer) |
-| Barcode scan | Quagga2 (1D barcodes only) | `@ericblade/quagga2` |
+| Barcode scan | ZXing (UPC_A and UPC_E only) | `@zxing/browser`, `@zxing/library` |
 | Camera capture | `getUserMedia` + `<video>` + `<canvas>` | (built-in) |
 | Background removal | remove.bg API | (HTTP, no SDK) |
 | External barcode lookup | Barcode Lookup API | (HTTP, no SDK) |
 | Blur detection | Laplacian variance | (custom, no package) |
 
-iOS Safari does not implement `BarcodeDetector` (confirmed on iOS 26). Use `@ericblade/quagga2` — it handles only 1D formats (EAN-13, EAN-8, UPC-A, UPC-E) which covers all CPG retail barcodes in scope for v1.
+iOS Safari does not implement `BarcodeDetector` (confirmed on iOS 26). Use `@zxing/browser` with `DecodeHintType.POSSIBLE_FORMATS` restricted to `[BarcodeFormat.UPC_A, BarcodeFormat.UPC_E]` — sufficient for US CPG retail. v2: extend to EAN_13 and EAN_8 for international products.
 
 ---
 
@@ -104,7 +104,7 @@ All required. Set in Vercel project settings and in a local `.env` (gitignored).
 - Per-category photo requirements (all new items require `["front", "back", "top"]` in v1)
 - Confirmation pop-up for Case 1 (item in DB, needs photos): "Item is in DB, needs X photos — proceed?" with Yes/No. Yes routes to CaptureScreen, No returns focus to scanner.
 - Confirmation pop-up for Case 3 (item not in DB): "Item not found — proceed to capture?" with Yes/No. Yes routes to CaptureScreen, No returns focus to scanner.
-- EAN-13 and EAN-8 barcode formats (v1 scanner accepts UPC-A and UPC-E only — sufficient for US CPG retail). v2: extend Quagga2 decoder to include `ean_reader` and `ean_8_reader` for international products.
+- EAN-13 and EAN-8 barcode formats (v1 scanner accepts UPC-A and UPC-E only — sufficient for US CPG retail). v2: extend ZXing hints to include `BarcodeFormat.EAN_13` and `BarcodeFormat.EAN_8` for international products.
 
 ---
 
