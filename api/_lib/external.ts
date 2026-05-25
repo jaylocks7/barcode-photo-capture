@@ -13,15 +13,15 @@ export async function lookupExternalProduct(barcode: string): Promise<{ name: st
   return { name: 'Unknown Item' }
 }
 
-export async function callRemoveBg(imageBytes: ArrayBuffer | Buffer): Promise<ArrayBuffer> {
-  const form = new FormData()
-  form.append('image_file', new Blob([imageBytes], { type: 'image/jpeg' }), 'capture.jpg')
-  form.append('size', 'auto')
-  const res = await fetch('https://api.remove.bg/v1.0/removebg', {
-    method: 'POST',
-    headers: { 'X-Api-Key': process.env.REMOVEBG_API_KEY! },
-    body: form,
-  })
-  if (!res.ok) throw new Error(`remove.bg failed: ${res.status}`)
-  return await res.arrayBuffer()
-}
+// export async function callRemoveBg(imageBytes: ArrayBuffer | Buffer): Promise<ArrayBuffer> {
+//   const form = new FormData()
+//   form.append('image_file', new Blob([imageBytes], { type: 'image/jpeg' }), 'capture.jpg')
+//   form.append('size', 'auto')
+//   const res = await fetch('https://api.remove.bg/v1.0/removebg', {
+//     method: 'POST',
+//     headers: { 'X-Api-Key': process.env.REMOVEBG_API_KEY! },
+//     body: form,
+//   })
+//   if (!res.ok) throw new Error(`remove.bg failed: ${res.status}`)
+//   return await res.arrayBuffer()
+// }

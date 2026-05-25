@@ -20,11 +20,13 @@ export async function postPhoto(
   barcode: string,
   view: string,
   image: Blob,
+  processedImage: Blob,
   name?: string
 ): Promise<PostPhotoResponse> {
   const form = new FormData()
   form.append('view', view)
   form.append('image', image, `${view}.jpg`)
+  form.append('processedImage', processedImage, `${view}-processed.png`)
   if (name) form.append('name', name)
   const res = await fetch(`/api/items/${encodeURIComponent(barcode)}/photos`, {
     method: 'POST',

@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import Busboy from 'busboy'
 import { requireAuth } from '../../_lib/auth.js'
 import { getItem, setItem, uploadToS3 } from '../../_lib/storage.js'
-import { callRemoveBg } from '../../_lib/external.js'
+// import { callRemoveBg } from '../../_lib/external.js'
 import type { ItemRecord, View } from '../../../src/types.js'
 
 export const config = {
@@ -26,21 +26,26 @@ function newItemRecord(params: { barcode: string; name: string }): ItemRecord {
   }
 }
 
-function parseForm(req: VercelRequest): Promise<{ fields: Record<string, string>; imageBuffer: Buffer }> {
+function parseForm(req: VercelRequest): Promise<{ fields: Record<string, string>; imageBuffer: Buffer; processedBuffer: Buffer | null }> {
   return new Promise((resolve, reject) => {
     const bb = Busboy({ headers: req.headers as Record<string, string> })
     const fields: Record<string, string> = {}
     let imageBuffer: Buffer | null = null
+    let processedBuffer: Buffer | null = null
 
     bb.on('field', (name, value) => { fields[name] = value })
-    bb.on('file', (_name, file) => {
+    bb.on('file', (name, file) => {
       const chunks: Buffer[] = []
       file.on('data', (chunk: Buffer) => chunks.push(chunk))
-      file.on('end', () => { imageBuffer = Buffer.concat(chunks) })
+      file.on('end', () => {
+        const buf = Buffer.concat(chunks)
+        if (name === 'image') imageBuffer = buf
+        else if (name === 'processedImage') processedBuffer = buf
+      })
     })
     bb.on('finish', () => {
       if (!imageBuffer) return reject(new Error('no image in request'))
-      resolve({ fields, imageBuffer })
+      resolve({ fields, imageBuffer, processedBuffer })
     })
     bb.on('error', reject)
 
@@ -58,7 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const barcode = req.query.barcode as string
-    const { fields, imageBuffer } = await parseForm(req)
+    const { fields, imageBuffer, processedBuffer } = await parseForm(req)
 
     const view = fields.view
     if (!VALID_VIEWS.includes(view as View)) {
@@ -79,12 +84,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       contentType: 'image/jpeg',
     })
 
-    const cutoutBuffer = await callRemoveBg(imageBuffer)
+    // const cutoutBuffer = await callRemoveBg(imageBuffer)
+    const cutoutBuffer = processedBuffer ?? imageBuffer
+    const cutoutContentType = processedBuffer ? 'image/png' : 'image/jpeg'
 
     const processedUrl = await uploadToS3({
       key: `items/${barcode}/${view}-processed.png`,
       body: new Uint8Array(cutoutBuffer),
-      contentType: 'image/png',
+      contentType: cutoutContentType,
     })
 
     item.raw_photo_urls[view as View] = rawUrl

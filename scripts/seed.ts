@@ -26,16 +26,6 @@ const items: ItemRecord[] = [
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   },
-  {
-    barcode: '012345678905',
-    name: 'Coca-Cola Can 12oz',
-    needs_photos: true,
-    required_views: ['front', 'back', 'top'],
-    photo_urls: { front: PLACEHOLDER, back: PLACEHOLDER },
-    raw_photo_urls: { front: PLACEHOLDER, back: PLACEHOLDER },
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
 ]
 
 for (const item of items) {

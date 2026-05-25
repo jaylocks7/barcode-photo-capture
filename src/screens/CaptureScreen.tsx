@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { postPhoto } from '../lib/api'
 import { computeLaplacianVariance } from '../lib/blur'
-import { resizeToJpeg } from '../lib/resize'
+import { resizeCanvas } from '../lib/resize'
+import { removeBackground, canvasToPng } from '../lib/removeBackground'
 import type { ItemRecord, View } from '../types'
 
 type Props = {
@@ -62,7 +63,10 @@ export default function CaptureScreen({ barcode, item, pendingName, onPhotoPoste
     canvas.getContext('2d')!.drawImage(video, 0, 0)
 
     const variance = computeLaplacianVariance(canvas)
-    const blob = await resizeToJpeg(canvas)
+    const resized = resizeCanvas(canvas)
+    const blob = await new Promise<Blob>((resolve, reject) =>
+      resized.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/jpeg', 0.85)
+    )
     const url = URL.createObjectURL(blob)
 
     setCapturedBlob(blob)
@@ -71,15 +75,17 @@ export default function CaptureScreen({ barcode, item, pendingName, onPhotoPoste
     if (variance < 100) {
       setIsBlurry(true)
     } else {
-      await submitPhoto(blob, url)
+      await submitPhoto(blob, url, resized)
     }
   }
 
-  async function submitPhoto(blob: Blob, blobUrl: string) {
+  async function submitPhoto(rawBlob: Blob, blobUrl: string, canvas: HTMLCanvasElement) {
     setIsBlurry(false)
     setIsProcessing(true)
     try {
-      const result = await postPhoto(barcode, currentView, blob, pendingName ?? undefined)
+      const processedCanvas = removeBackground(canvas)
+      const processedBlob = await canvasToPng(processedCanvas)
+      const result = await postPhoto(barcode, currentView, rawBlob, processedBlob, pendingName ?? undefined)
       if (result.item) {
         onPhotoPosted(result.item)
       }

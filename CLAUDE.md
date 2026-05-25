@@ -79,7 +79,7 @@ All required. Set in Vercel project settings and in a local `.env` (gitignored).
 6. `POST /api/items/:barcode/photos` — accepts multipart with `view`, `image`, optional `name`; calls remove.bg; uploads cutout to S3; updates KV
 7. Three user flows (Section 8): existing+complete, existing+needs photos, new item
 8. Photo capture per required view with client-side resize to max 1280px before send
-9. Blur detection via Laplacian variance, with user override
+9. Blur detection via Laplacian variance — blurry shots show a Retake-only overlay (no override)
 10. Background removal via remove.bg, server-side
 11. Preserve both raw and background-removed images in S3 (`{view}-raw.jpg` and `{view}-processed.png`) — both URLs stored on the item record
 12. Success screen showing the cutout(s)
@@ -113,7 +113,7 @@ All required. Set in Vercel project settings and in a local `.env` (gitignored).
 Create files exactly at these paths. Do not invent new directories.
 
 ```
-mvp/
+/
 ├── api/
 │   ├── _lib/
 │   │   ├── auth.ts                 # requireAuth(req) helper
@@ -139,7 +139,7 @@ mvp/
 │   └── types.ts                    # ItemRecord, GetItemResponse, PostPhotoResponse
 ├── scripts/
 │   └── seed.ts                     # one-off Redis seed runner
-├── .env.local                      # gitignored
+├── .env                            # gitignored
 ├── .gitignore
 ├── tsconfig.json
 ├── vite.config.ts                  # plugins: [react(), tailwindcss()]
@@ -355,22 +355,16 @@ Every API route MUST call `requireAuth(req)` as its first action.
 
 ```ts
 // api/_lib/auth.ts
-export function requireAuth(req: Request): Response | null {
-  const provided = req.headers.get('x-app-password');
-  if (provided !== process.env.APP_PASSWORD) {
-    return new Response(JSON.stringify({ error: 'unauthorized' }), {
-      status: 401,
-      headers: { 'content-type': 'application/json' },
-    });
-  }
-  return null;
+import type { VercelRequest } from '@vercel/node'
+
+export function requireAuth(req: VercelRequest): boolean {
+  return req.headers['x-app-password'] === process.env.APP_PASSWORD
 }
 ```
 
 Usage:
 ```ts
-const unauthorized = requireAuth(req);
-if (unauthorized) return unauthorized;
+if (!requireAuth(req)) return res.status(401).json({ error: 'unauthorized' })
 ```
 
 ### 11.2 Client API wrapper
@@ -462,23 +456,34 @@ import { createClient } from 'redis';
 import { AwsClient } from 'aws4fetch';
 import type { ItemRecord } from '../../src/types';
 
-const redis = await createClient({ url: process.env.REDIS_URL }).connect();
+let _redis: ReturnType<typeof createClient> | null = null
 
-const aws = new AwsClient({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-  region: process.env.AWS_REGION!,
-  service: 's3',
-});
+async function getRedis() {
+  if (!_redis) {
+    _redis = await createClient({ url: process.env.REDIS_URL }).connect()
+  }
+  return _redis
+}
+
+function getAws() {
+  return new AwsClient({
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+    region: process.env.AWS_REGION!,
+    service: 's3',
+  })
+}
 
 export const itemKey = (barcode: string) => `item:${barcode}`;
 
 export async function getItem(barcode: string): Promise<ItemRecord | null> {
+  const redis = await getRedis()
   const val = await redis.get(itemKey(barcode));
   return val ? JSON.parse(val) as ItemRecord : null;
 }
 
 export async function setItem(item: ItemRecord): Promise<void> {
+  const redis = await getRedis()
   await redis.set(itemKey(item.barcode), JSON.stringify(item));
 }
 
@@ -490,7 +495,7 @@ export async function uploadToS3(params: {
   const bucket = process.env.S3_BUCKET!;
   const region = process.env.AWS_REGION!;
   const url = `https://${bucket}.s3.${region}.amazonaws.com/${params.key}`;
-  const res = await aws.fetch(url, {
+  const res = await getAws().fetch(url, {
     method: 'PUT',
     body: params.body,
     headers: { 'Content-Type': params.contentType },
@@ -628,13 +633,12 @@ Populated by `scripts/seed.ts` into Redis.
 
 | Barcode | Name | required_views | photo_urls state | raw_photo_urls state | Demo role |
 |---|---|---|---|---|---|
-| `028400090307` | Lay's Classic Chips | `["front", "back"]` | front filled, back empty | front filled, back empty | Demo flow #1 — needs some |
-| `038000138416` | Pringles Original | `["front", "back", "top"]` | all empty | all empty | Demo flow #2 — needs all |
-| `012345678905` | Coca-Cola Can 12oz | `["front", "back"]` | both filled | both filled | NOT used in demo; kept so case 2 code path remains testable during build |
+| `096619926626` | Kirkland Fish Oil 1000mg | `["front", "back", "top"]` | front filled, back+top empty | front filled, back+top empty | Demo flow #1 — needs some |
+| `016500558415` | One A Day Mens Multivitamin | `["front", "back", "top"]` | all filled | all filled | Case 2 — already complete, shows inline banner |
 
 For seeded items with filled `photo_urls`/`raw_photo_urls`, use any reachable placeholder image URL. The actual image content does not matter for the demo, only that the URLs render in the KV dashboard view.
 
-For demo flow #3, the developer scans a real product whose barcode is NOT in the seed data. Pick a packaged snack/beverage in the recording environment that exists in Open Food Facts. Verify before recording by hitting `https://world.openfoodfacts.org/api/v0/product/<barcode>.json` and confirming `status === 1`.
+For demo flow #2 (new item / Case 3), scan a real product whose barcode is NOT in the seed data. Verify it exists in the Barcode Lookup API before recording.
 
 ---
 
@@ -642,30 +646,26 @@ For demo flow #3, the developer scans a real product whose barcode is NOT in the
 
 Exactly four steps. Total target length: 2–3 minutes.
 
-### Step 1 — Login + needs some photos (Lay's, partial)
+### Step 1 — Login + needs some photos (Kirkland Fish Oil, partial)
 1. Open Vercel URL on iPhone, enter password → ScannerScreen
-2. Scan Lay's (`028400090307`) → server returns item with front filled, back empty → app routes to CaptureScreen with `remainingViews = ["back"]`
-3. **Showcase blur rejection here:** deliberately shaky/out-of-focus shot of the back → blur-warning overlay appears → tap Retake → clean back shot → "Removing background…" overlay → response
-4. Land on SuccessScreen with the back cutout
+2. Scan Kirkland Fish Oil (`096619926626`) → server returns item with front filled, back+top empty → app routes to CaptureScreen with `remainingViews = ["back", "top"]`
+3. **Showcase blur rejection here:** deliberately shaky/out-of-focus shot → blur-warning overlay appears → tap Retake → clean shot → "Removing background…" overlay → response
+4. Capture top → Processing → SuccessScreen auto-dismisses after 2 seconds → back to ScannerScreen
 
-### Step 2 — Needs all photos (Pringles, empty)
-1. Tap [Scan another] → ScannerScreen
-2. Scan Pringles (`038000138416`) → server returns item with all three views empty → CaptureScreen with `remainingViews = ["front", "back", "top"]`
-3. Capture front → Processing → Capture back → Processing → Capture top → Processing
-4. Land on SuccessScreen with all three cutouts
+### Step 2 — Unknown item, Barcode Lookup API resolves name (case 3)
+1. Scan a real product whose barcode is NOT in seed data → server returns `{ exists: false, suggestion: { name: "..." } }`
+2. App routes directly to CaptureScreen with `pendingName` set; user does NOT see a name input screen
+3. Capture front (first POST carries `name: pendingName`; server creates the record with `required_views: ["front", "back", "top"]`) → Processing → Capture back → Processing → Capture top → Processing
+4. SuccessScreen shows all three cutouts, auto-dismisses after 2 seconds
 
-### Step 3 — Unknown item, Open Food Facts resolves name (case 3)
-1. Tap [Scan another] → ScannerScreen
-2. Scan a real product whose barcode is NOT in seed data (pre-verified in OFF) → server returns `{ exists: false, suggestion: { name: "..." } }`
-3. App routes directly to CaptureScreen with `pendingName` set; user does NOT see a name input screen
-4. Capture front (first POST carries `name: pendingName`; server creates the record with `required_views: ["front", "back", "top"]`) → Processing → Capture back → Processing → Capture top → Processing
-5. Land on SuccessScreen with both cutouts and the auto-resolved name
+### Step 3 — Already complete (One A Day, case 2)
+1. Scan One A Day Multivitamin (`016500558415`) → inline banner appears on ScannerScreen with item name + photo thumbnails
+2. Tap [Dismiss] → banner clears, scanner stays active
 
 ### Step 4 — Show off the DB
 1. Open the Redis console in a browser tab
-2. Open the record for the item just created in Step 3 — show the JSON: `name`, `required_views`, `photo_urls`, `raw_photo_urls`, timestamps
-3. Click each S3 URL to open the image in a new tab. For at least one view, show the raw image and the bg-removed processed image side by side — emphasize the before/after as the visual payoff
-4. Optional: also navigate to Pringles or Lay's record to show multiple views populated
+2. Open the record for the item created in Step 2 — show the JSON: `name`, `required_views`, `photo_urls`, `raw_photo_urls`, timestamps
+3. Click an S3 URL to open in a new tab. Show the raw JPEG and the bg-removed PNG side by side — emphasize the before/after as the visual payoff
 
 ---
 
@@ -677,12 +677,12 @@ Exactly four steps. Total target length: 2–3 minutes.
 - Do NOT call remove.bg from the client (would expose the API key).
 - Do NOT import `@aws-sdk/*` packages anywhere. They use Node `Buffer` and break in Edge runtime. Use `aws4fetch` exclusively for S3 access.
 - Do NOT add a `/api/auth` endpoint. Auth is per-request via header, not session-based.
-- Do NOT use Node runtime for the photo POST endpoint unless Edge cannot satisfy a constraint. Edge `Request.formData()` removes the need for `formidable`/`busboy`.
+- Do NOT use Edge runtime for any Vercel function. All routes use Node runtime (`export const config = { runtime: 'nodejs' }`). The `redis` package requires Node TCP and is incompatible with Edge.
 - Do NOT introduce React Router. Use a `currentScreen` state variable in `<App>`.
 - Do NOT store ONLY the processed cutout. Raw (pre-processing) image MUST also be persisted to S3 under `{view}-raw.jpg` and its URL stored in `raw_photo_urls[view]`. This supports the demo's "show off the DB" step and provides an audit trail.
 - Do NOT compute `needs_photos` at read time. Always derived and persisted at write time.
 - Do NOT add upload progress indicators, retry buttons, or offline detection in v1.
-- Do NOT auto-advance from the blur-warning overlay. The user must tap Retake or Use Anyway.
+- Do NOT auto-advance from the blur-warning overlay. The user must tap Retake. There is no "Use Anyway" option.
 - Do NOT use the same camera stream for `Scanner` and `Capture`. Each screen owns its own `getUserMedia` lifecycle and releases the stream on unmount.
 
 ---
@@ -690,7 +690,7 @@ Exactly four steps. Total target length: 2–3 minutes.
 ## 16. Troubleshooting / known gotchas
 
 - **iOS Safari camera fails with `NotAllowedError`** — site must be HTTPS. Vercel preview URLs satisfy this; `localhost` does not.
-- **`Request.formData()` undefined** — confirm the route exports `export const config = { runtime: 'edge' }`.
+- **Multipart form parsing issues** — confirm the route exports `export const config = { runtime: 'nodejs' }` and uses `busboy` or `formidable` to parse the body; `req.body` is not automatically parsed for multipart.
 - **S3 PUT returns CORS error** — bucket CORS must include the Vercel domain and `localhost:5173`; see Section 11.7.
 - **Vercel function body size > 4.5 MB** — client-side resize is mandatory; max dimension 1280px keeps JPEG well under 1 MB.
 - **remove.bg returns 402** — free tier exhausted (50/month). Use the same input for repeated dev tests; remove.bg may charge once per unique image.
