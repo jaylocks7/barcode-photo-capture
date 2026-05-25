@@ -100,6 +100,8 @@ All required. Set in Vercel project settings and in a local `.env` (gitignored).
 - Tests
 - Search by item name
 - Analytics, logging beyond `console.log`, monitoring
+- Product category derivation from barcode scan
+- Per-category photo requirements (all new items require `["front", "back", "top"]` in v1)
 
 ---
 
@@ -184,7 +186,7 @@ needs_photos = required_views.some(v => !(v in photo_urls))
 
 **Allowed views (v1):** `"front"`, `"back"`, `"top"`. No other view names. Server MUST reject any other value with 400.
 
-**Default `required_views` for newly-created items:** `["front", "back"]`.
+**Default `required_views` for newly-created items:** `["front", "back", "top"]`.
 
 ---
 
@@ -213,10 +215,12 @@ Trigger: `GET /api/items/:barcode` → `{ exists: true, item: { needs_photos: fa
 
 ```
 1. ScannerScreen shows an inline banner: "{item.name} — already in catalog ✓"
-   (Banner sits above the scanner viewfinder; thumbnails of item.photo_urls shown below banner.)
+   (Banner sits above the scanner viewfinder; thumbnails of item.photo_urls — background-removed images only — shown below banner.)
 2. Banner has a [Dismiss] button that clears it and returns focus to scanning.
 3. No navigation; user stays on ScannerScreen.
 ```
+
+**v1 note:** Banner is kept for the demo to make the "already complete" code path visible and to show off the bg-removed cutouts. **v2:** Replace with a subtle non-blocking indicator (e.g. haptic + brief toast) so the scanning flow isn't interrupted.
 
 ### Case 3 — Entry does not exist
 
@@ -227,12 +231,14 @@ Trigger: `GET /api/items/:barcode` → `{ exists: false, suggestion: { name: "..
 2. Skip directly to CaptureScreen (no intermediate screen)
 3. First capture:
    POST /api/items/:barcode/photos { view: "front", image, name: pendingName }
-   Server creates the item with required_views: ["front", "back"]
+   Server creates the item with required_views: ["front", "back", "top"]
 4. Clear pendingName after first successful POST
 5. Continue capture loop as in Case 1
 ```
 
 Cases 1 and 3 share the same capture loop after the first POST. Only difference: the first POST in Case 3 carries `name`; subsequent POSTs do not.
+
+**Resilience design:** Each POST is independently atomic — it saves the photo to S3 and updates the Redis record before returning. If the sequence is interrupted mid-way (network partition, app crash, locked screen), already-captured views are preserved in Redis and S3. On rescan, `GET /api/items/:barcode` will return the partially-complete record and the capture loop picks up at the first missing view. For Case 3, the item record does not exist in Redis until the first POST succeeds — if the app crashes before that, the user simply rescans and gets the suggestion again with no lost work.
 
 ---
 
@@ -301,7 +307,7 @@ All routes use Vercel Node runtime. All routes call `requireAuth(req)` first.
 7. let item = await kv.get<ItemRecord>(`item:${barcode}`)
 8. if (!item) {
      if (!name) return 400
-     item = newItemRecord({ barcode, name })  // required_views = ["front", "back"]
+     item = newItemRecord({ barcode, name })  // required_views = ["front", "back", "top"]
    }
 9. const imageBuffer = await image.arrayBuffer()
 10. const rawUrl = await uploadToS3({
@@ -331,7 +337,7 @@ These are intentional simplifications baked into v1. Do not silently work around
 
 1. **The barcode lookup API always returns a name for any CPG barcode.** v1 uses Open Food Facts, which has imperfect coverage; the helper falls back to `"Unknown Item"` to keep the flow non-breaking. Production behind a paid commercial barcode API would never hit that fallback.
 2. **Background-removed cutouts are the canonical image format.** Confirmed against Company I want to work for's existing catalog.
-3. **The set of valid views is fixed: `"front"`, `"back"`, `"top"`.** New items default to `["front", "back"]`. Seeded items may use any subset. Variable per-category view requirements is a v2 concern.
+3. **The set of valid views is fixed: `"front"`, `"back"`, `"top"`.** All new items default to `["front", "back", "top"]`. Per-category view requirements is a v2 concern.
 4. **A single shared password gates the app.** Single env var, validated per-request via `x-app-password` header. Per-user identity is v2.
 5. **Redis represents the global item catalog.** In production this is Company I want to work for's actual DB.
 6. **Single-tenant data model.** No venue-specific overrides on item records in v1.
@@ -649,7 +655,7 @@ Exactly four steps. Total target length: 2–3 minutes.
 1. Tap [Scan another] → ScannerScreen
 2. Scan a real product whose barcode is NOT in seed data (pre-verified in OFF) → server returns `{ exists: false, suggestion: { name: "..." } }`
 3. App routes directly to CaptureScreen with `pendingName` set; user does NOT see a name input screen
-4. Capture front (first POST carries `name: pendingName`; server creates the record with `required_views: ["front", "back"]`) → Processing → Capture back → Processing
+4. Capture front (first POST carries `name: pendingName`; server creates the record with `required_views: ["front", "back", "top"]`) → Processing → Capture back → Processing → Capture top → Processing
 5. Land on SuccessScreen with both cutouts and the auto-resolved name
 
 ### Step 4 — Show off the DB

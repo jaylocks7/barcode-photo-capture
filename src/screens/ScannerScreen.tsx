@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { BrowserMultiFormatReader } from '@zxing/browser'
 import { BarcodeFormat, DecodeHintType } from '@zxing/library'
-import type { GetItemResponse } from '../types'
+import { getItem } from '../lib/api'
+import type { GetItemResponse, ItemRecord } from '../types'
 
 type Props = {
   onScanResult: (barcode: string, result: GetItemResponse) => void
@@ -15,17 +16,15 @@ hints.set(DecodeHintType.POSSIBLE_FORMATS, [
   BarcodeFormat.UPC_E,
 ])
 
-export default function ScannerScreen({ onScanResult: _onScanResult }: Props) {
+export default function ScannerScreen({ onScanResult }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const readerRef = useRef<BrowserMultiFormatReader | null>(null)
   const lastBarcodeRef = useRef<string | null>(null)
-  const [lastScanned, setLastScanned] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
   const [manualBarcode, setManualBarcode] = useState('')
+  const [completeBanner, setCompleteBanner] = useState<ItemRecord | null>(null)
 
   useEffect(() => {
     const reader = new BrowserMultiFormatReader(hints)
-    readerRef.current = reader
-
     let stopFn: (() => void) | null = null
 
     reader.decodeFromConstraints(
@@ -36,8 +35,7 @@ export default function ScannerScreen({ onScanResult: _onScanResult }: Props) {
         const text = result.getText()
         if (text === lastBarcodeRef.current) return
         lastBarcodeRef.current = text
-        console.log('scanned:', text)
-        setLastScanned(text)
+        handleBarcode(text)
         setTimeout(() => { lastBarcodeRef.current = null }, 3000)
       }
     ).then(controls => { stopFn = () => controls.stop() })
@@ -45,16 +43,51 @@ export default function ScannerScreen({ onScanResult: _onScanResult }: Props) {
     return () => { stopFn?.() }
   }, [])
 
+  async function handleBarcode(barcode: string) {
+    if (loading) return
+    setLoading(true)
+    try {
+      const result = await getItem(barcode)
+      if (result.exists && !result.item.needs_photos) {
+        setCompleteBanner(result.item)
+      } else {
+        onScanResult(barcode, result)
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false)
+    }
+  }
+
   function handleManualSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!manualBarcode.trim()) return
-    console.log('manual:', manualBarcode.trim())
-    setLastScanned(manualBarcode.trim())
+    handleBarcode(manualBarcode.trim())
     setManualBarcode('')
   }
 
   return (
     <div className="min-h-screen bg-black flex flex-col">
+      {completeBanner && (
+        <div className="bg-white border-b border-gray-200 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="font-medium text-gray-900">{completeBanner.name} — already in catalog ✓</span>
+            <button
+              onClick={() => setCompleteBanner(null)}
+              className="text-sm text-blue-600 ml-4"
+            >
+              Dismiss
+            </button>
+          </div>
+          <div className="flex gap-2 overflow-x-auto">
+            {Object.values(completeBanner.photo_urls).map((url, i) => (
+              <img key={i} src={url} className="h-20 w-20 object-contain rounded-lg bg-gray-50" />
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="relative flex-1">
         <video
           ref={videoRef}
@@ -62,9 +95,9 @@ export default function ScannerScreen({ onScanResult: _onScanResult }: Props) {
           playsInline
           muted
         />
-        {lastScanned && (
-          <div className="absolute top-4 left-4 right-4 bg-green-500 text-white rounded-xl px-4 py-3 text-center font-mono text-lg font-bold">
-            {lastScanned}
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+            <span className="text-white text-lg">Looking up…</span>
           </div>
         )}
       </div>
@@ -81,7 +114,7 @@ export default function ScannerScreen({ onScanResult: _onScanResult }: Props) {
           />
           <button
             type="submit"
-            disabled={!manualBarcode.trim()}
+            disabled={!manualBarcode.trim() || loading}
             className="bg-blue-600 text-white rounded-lg px-4 py-2 font-medium disabled:opacity-50"
           >
             Go
