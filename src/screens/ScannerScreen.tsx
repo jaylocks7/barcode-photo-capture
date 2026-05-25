@@ -15,7 +15,6 @@ export default function ScannerScreen({ onScanResult }: Props) {
   const [loading, setLoading] = useState(false)
   const [manualBarcode, setManualBarcode] = useState('')
   const [completeBanner, setCompleteBanner] = useState<ItemRecord | null>(null)
-  const [debugBarcode, setDebugBarcode] = useState<string | null>(null)
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -38,9 +37,31 @@ export default function ScannerScreen({ onScanResult }: Props) {
       }
     )
 
+    let consecutive: { code: string; count: number } | null = null
+
     function onDetected(result: QuaggaJSResultObject) {
       const code = result.codeResult.code
       if (!code) return
+
+      // Reject low-confidence reads
+      const errors = result.codeResult.decodedCodes
+        .map(x => x.error)
+        .filter((e): e is number => e !== undefined)
+      if (errors.length > 0) {
+        const avgError = errors.reduce((a, b) => a + b, 0) / errors.length
+        if (avgError > 0.15) return
+      }
+
+      // Require 3 consecutive reads of the same code before firing —
+      // false positives from nearby 2D barcodes produce inconsistent values frame-to-frame
+      if (consecutive?.code === code) {
+        consecutive.count++
+      } else {
+        consecutive = { code, count: 1 }
+      }
+      if (consecutive.count < 3) return
+      consecutive = null
+
       if (code === lastBarcodeRef.current) return
       lastBarcodeRef.current = code
       handleBarcodeRef.current(code)
@@ -56,8 +77,7 @@ export default function ScannerScreen({ onScanResult }: Props) {
   }, [])
 
   async function handleBarcode(barcode: string) {
-    if (loading) return
-    setDebugBarcode(barcode)
+    if (loading || completeBanner) return
     setLoading(true)
     try {
       const result = await getItem(barcode)
@@ -121,12 +141,6 @@ export default function ScannerScreen({ onScanResult }: Props) {
           </div>
         )}
       </div>
-
-      {debugBarcode && (
-        <div className="bg-yellow-100 px-4 py-2 text-xs font-mono text-center text-yellow-900">
-          last scan: {debugBarcode}
-        </div>
-      )}
 
       <div className="bg-white p-4">
         <form onSubmit={handleManualSubmit} className="flex gap-2">
