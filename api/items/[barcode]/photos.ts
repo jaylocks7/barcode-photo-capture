@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import Busboy from 'busboy'
 import { requireAuth } from '../../_lib/auth.js'
 import { getItem, setItem, uploadToS3 } from '../../_lib/storage.js'
-// import { callRemoveBg } from '../../_lib/external.js'
+import { callRemoveBg } from '../../_lib/external.js'
 import type { ItemRecord, View } from '../../../src/types.js'
 
 export const config = {
@@ -26,7 +26,7 @@ function newItemRecord(params: { barcode: string; name: string }): ItemRecord {
   }
 }
 
-function parseForm(req: VercelRequest): Promise<{ fields: Record<string, string>; imageBuffer: Buffer; processedBuffer: Buffer | null }> {
+function parseForm(req: VercelRequest): Promise<{ fields: Record<string, string>; imageBuffer: Buffer; processedBuffer: Buffer | null; skipProcessing: boolean }> {
   return new Promise((resolve, reject) => {
     const bb = Busboy({ headers: req.headers as Record<string, string> })
     const fields: Record<string, string> = {}
@@ -45,7 +45,7 @@ function parseForm(req: VercelRequest): Promise<{ fields: Record<string, string>
     })
     bb.on('finish', () => {
       if (!imageBuffer) return reject(new Error('no image in request'))
-      resolve({ fields, imageBuffer, processedBuffer })
+      resolve({ fields, imageBuffer, processedBuffer, skipProcessing: fields.skipProcessing === 'true' })
     })
     bb.on('error', reject)
 
@@ -63,7 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const barcode = req.query.barcode as string
-    const { fields, imageBuffer, processedBuffer } = await parseForm(req)
+    const { fields, imageBuffer, processedBuffer, skipProcessing } = await parseForm(req)
 
     const view = fields.view
     if (!VALID_VIEWS.includes(view as View)) {
@@ -84,9 +84,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       contentType: 'image/jpeg',
     })
 
-    // const cutoutBuffer = await callRemoveBg(imageBuffer)
-    const cutoutBuffer = processedBuffer ?? imageBuffer
-    const cutoutContentType = processedBuffer ? 'image/png' : 'image/jpeg'
+    // skipProcessing=true: raw stored as placeholder, UI advances fast.
+    // Background task re-posts without the flag so remove.bg runs then.
+    const cutoutBuffer = skipProcessing
+      ? imageBuffer
+      : processedBuffer ?? await callRemoveBg(imageBuffer)
+    const cutoutContentType = skipProcessing || !processedBuffer ? 'image/jpeg' : 'image/png'
 
     const processedUrl = await uploadToS3({
       key: `items/${barcode}/${view}-processed.png`,

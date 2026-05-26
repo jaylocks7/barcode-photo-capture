@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { postPhoto } from '../lib/api'
 import { computeLaplacianVariance } from '../lib/blur'
 import { resizeCanvas } from '../lib/resize'
-import { removeBackground } from '../lib/removeBackground'
 import type { ItemRecord, View } from '../types'
 
 type Props = {
@@ -88,8 +87,8 @@ export default function CaptureScreen({ barcode, item, pendingName, onPhotoPoste
     const capturedName = pendingName
 
     try {
-      // Post raw immediately so the UI advances to the next view without waiting for bg removal
-      const result = await postPhoto(barcode, capturedView, rawBlob, undefined, capturedName ?? undefined)
+      // Post raw immediately with skipProcessing — server stores raw as placeholder, returns fast.
+      const result = await postPhoto(barcode, capturedView, rawBlob, { name: capturedName ?? undefined, skipProcessing: true })
       if (result.item) {
         onPhotoPosted(result.item)
       }
@@ -100,11 +99,9 @@ export default function CaptureScreen({ barcode, item, pendingName, onPhotoPoste
       setIsProcessing(false)
     }
 
-    // Background removal runs after the UI has already advanced.
-    // Re-posts with the processed image; calls onPhotoPosted again so App state
-    // (including SuccessScreen) gets updated with the cutout URL when ready.
-    removeBackground(rawBlob)
-      .then(processed => postPhoto(barcode, capturedView, rawBlob, processed))
+    // Background task: re-post without skipProcessing so the server calls remove.bg.
+    // Calls onPhotoPosted again so App state (and SuccessScreen) updates with the cutout URL.
+    postPhoto(barcode, capturedView, rawBlob)
       .then(result => { if (result?.item) onPhotoPosted(result.item) })
       .catch(() => {})
   }
