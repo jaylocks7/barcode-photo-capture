@@ -9,6 +9,7 @@ const items: ItemRecord[] = [
   {
     barcode: '096619926626',
     name: "Kirkland Fish Oil 1000mg",
+    price: 19.98,
     needs_photos: true,
     required_views: ['front', 'back'],
     photo_urls: { front: PLACEHOLDER },
@@ -19,6 +20,7 @@ const items: ItemRecord[] = [
   {
     barcode: '016500558415',
     name: 'One A Day Mens Multivitamin',
+    price: 24.99,
     needs_photos: false,
     required_views: ['front', 'back'],
     photo_urls: { front: PLACEHOLDER, back: PLACEHOLDER },
