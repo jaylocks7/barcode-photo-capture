@@ -3,6 +3,7 @@ export type View = 'front' | 'back' | 'top';
 export type ItemRecord = {
   barcode: string;
   name: string;
+  price?: number;                   // optional, set at first capture
   needs_photos: boolean;            // derived at write time
   required_views: View[];           // any subset of ["front", "back", "top"]
   photo_urls: Partial<Record<View, string>>;     // view -> processed (bg-removed) S3 URL

@@ -78,7 +78,13 @@ export default function ScannerScreen({ onScanResult }: Props) {
       {completeBanner && (
         <div className="bg-white border-b border-gray-200 p-4">
           <div className="flex items-center justify-between mb-3">
-            <span className="font-medium text-gray-900">{completeBanner.name} — already in catalog ✓</span>
+            <span className="font-medium text-gray-900">
+              {completeBanner.name}
+              {completeBanner.price != null && (
+                <span className="ml-2 text-gray-500 font-normal">${completeBanner.price.toFixed(2)}</span>
+              )}
+              {' — '}already in catalog ✓
+            </span>
             <button
               onClick={() => setCompleteBanner(null)}
               className="text-sm text-blue-600 ml-4"

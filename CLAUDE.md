@@ -23,7 +23,7 @@ Read this section before any task.
 5. **Do not add a router library** for v1. The screen tree is shallow; use a single state variable in `<App>` to switch screens.
 6. **Do not add error boundaries, retries, exponential backoff, or telemetry.** v1 happy-path only; a single `try/catch` around an API call with a generic "try again" toast is the ceiling.
 7. **Do not split a file into smaller files for stylistic reasons.** Only split when the file exceeds ~250 lines or there is a genuine cohesion boundary.
-8. **Do not modify the assumptions in Section 10** without asking. They are intentional simplifications.
+8. **Do not modify the assumptions in Section 9** without asking. They are intentional simplifications.
 9. **Use Node runtime** for all Vercel functions (`export const config = { runtime: 'nodejs' }`). The `redis` package requires Node.js TCP connections and is incompatible with Edge runtime.
 10. **Match the existing code style** when editing files. If creating a new file, default to TypeScript strict mode, single quotes, no semicolons inside JSX expressions.
 
@@ -69,7 +69,7 @@ All required. Set in Vercel project settings and in a local `.env` (gitignored).
 
 ## 5. Scope
 
-### 5.1 In scope (v1) — build these, in this order
+### 5.1 In scope (v1)
 
 1. Single-password gate over all API routes via `x-app-password` header
 2. `LoginScreen` that stores the password in `sessionStorage`
@@ -265,15 +265,6 @@ All routes use Vercel Node runtime. All routes call `requireAuth(req)` first.
 { "error": "unauthorized" }
 ```
 
-**Handler logic:**
-```
-1. requireAuth(req); on fail return 401
-2. const item = await kv.get<ItemRecord>(`item:${barcode}`)
-3. if (item) return { exists: true, item }
-4. const suggestion = await lookupExternalProduct(barcode)
-5. return { exists: false, suggestion }
-```
-
 ### 9.2 POST `/api/items/:barcode/photos`
 
 **Request headers:** `x-app-password: <APP_PASSWORD>`
@@ -282,6 +273,7 @@ All routes use Vercel Node runtime. All routes call `requireAuth(req)` first.
 - `view` (string, required) — one of `"front"`, `"back"`, `"top"`. Other values return 400.
 - `image` (File, required) — JPEG, already resized to max 1280px by client
 - `name` (string, optional) — required only when item does not yet exist
+- `skipProcessing` (string `"true"`, optional) — skip remove.bg; stores raw as the processed placeholder. Used by the client on the first fast POST; a background re-POST without this flag triggers remove.bg.
 
 **Responses:**
 ```json
@@ -297,39 +289,6 @@ All routes use Vercel Node runtime. All routes call `requireAuth(req)` first.
 
 // 401 — auth failure
 { "error": "unauthorized" }
-```
-
-**Handler logic:**
-```
-1. requireAuth(req); on fail return 401
-2. const form = await req.formData()
-3. const view = form.get('view') as string
-4. if (!['front', 'back', 'top'].includes(view)) return 400
-5. const image = form.get('image') as File
-6. const name = form.get('name') as string | null
-7. let item = await kv.get<ItemRecord>(`item:${barcode}`)
-8. if (!item) {
-     if (!name) return 400
-     item = newItemRecord({ barcode, name })  // required_views = ["front", "back", "top"]
-   }
-9. const imageBuffer = await image.arrayBuffer()
-10. const rawUrl = await uploadToS3({
-      key: `items/${barcode}/${view}-raw.jpg`,
-      body: imageBuffer,
-      contentType: 'image/jpeg'
-    })
-11. const cutoutBuffer = await callRemoveBg(imageBuffer)
-12. const processedUrl = await uploadToS3({
-      key: `items/${barcode}/${view}-processed.png`,
-      body: cutoutBuffer,
-      contentType: 'image/png'
-    })
-13. item.raw_photo_urls[view] = rawUrl
-14. item.photo_urls[view] = processedUrl
-15. item.needs_photos = item.required_views.some(v => !(v in item.photo_urls))
-16. item.updated_at = new Date().toISOString()
-17. await kv.set(`item:${barcode}`, item)
-18. return { processedUrl, item }
 ```
 
 ---
@@ -369,143 +328,19 @@ if (!requireAuth(req)) return res.status(401).json({ error: 'unauthorized' })
 
 ### 11.2 Client API wrapper
 
-All frontend API calls go through `src/lib/api.ts`. Do not call `fetch` directly from components.
-
-```ts
-// src/lib/api.ts
-function authHeader(): Record<string, string> {
-  const password = sessionStorage.getItem('app_password') || '';
-  return { 'x-app-password': password };
-}
-
-export async function getItem(barcode: string): Promise<GetItemResponse> {
-  const res = await fetch(`/api/items/${encodeURIComponent(barcode)}`, {
-    headers: authHeader(),
-  });
-  if (res.status === 401) {
-    sessionStorage.removeItem('app_password');
-    window.location.reload();
-  }
-  return res.json();
-}
-
-export async function postPhoto(
-  barcode: string,
-  view: string,
-  image: Blob,
-  name?: string
-): Promise<PostPhotoResponse> {
-  const form = new FormData();
-  form.append('view', view);
-  form.append('image', image, `${view}.jpg`);
-  if (name) form.append('name', name);
-  const res = await fetch(`/api/items/${encodeURIComponent(barcode)}/photos`, {
-    method: 'POST',
-    headers: authHeader(),
-    body: form,
-  });
-  return res.json();
-}
-```
+All frontend API calls go through `src/lib/api.ts`. Do not call `fetch` directly from components. `postPhoto` takes an options object `{ processedImage?, name?, skipProcessing? }` — see §9.2 for the `skipProcessing` two-POST pattern.
 
 ### 11.3 External barcode lookup
 
-```ts
-// api/_lib/external.ts (part 1 of 2 — see Section 11.4 for remove.bg)
-export async function lookupExternalProduct(barcode: string): Promise<{ name: string }> {
-  try {
-    const res = await fetch(
-      `https://api.barcodelookup.com/v3/products?barcode=${barcode}&formatted=y&key=${process.env.BARCODE_API_KEY}`
-    );
-    const data = await res.json();
-    if (data.products?.[0]?.title) {
-      return { name: data.products[0].title as string };
-    }
-  } catch {
-    // fall through to default
-  }
-  return { name: 'Unknown Item' };
-}
-```
+`lookupExternalProduct(barcode)` in `api/_lib/external.ts` hits the Barcode Lookup API and falls back to `"Unknown Item"` on any error.
 
-### 11.4 remove.bg call (also in `api/_lib/external.ts`)
+### 11.4 remove.bg call
 
-**Image format pipeline:** The captured frame is converted to JPEG on the client (via `canvas.toBlob(..., 'image/jpeg', 0.85)` in `resize.ts`) before upload. The JPEG bytes are sent as-is to remove.bg and also stored as the raw image in S3 (`{view}-raw.jpg`, `contentType: 'image/jpeg'`). The processed cutout returned by remove.bg is a PNG and is stored separately (`{view}-processed.png`).
+`callRemoveBg(imageBytes)` in `api/_lib/external.ts` POSTs the JPEG bytes to `https://api.remove.bg/v1.0/removebg` and returns the PNG `ArrayBuffer`. The client captures as JPEG (`resize.ts`, quality 0.85); raw JPEG is stored as `{view}-raw.jpg`, processed PNG as `{view}-processed.png`.
 
-```ts
-// api/_lib/external.ts (part 2 of 2)
-export async function callRemoveBg(imageBytes: ArrayBuffer): Promise<ArrayBuffer> {
-  const form = new FormData();
-  form.append('image_file', new Blob([imageBytes], { type: 'image/jpeg' }), 'capture.jpg');
-  form.append('size', 'auto');
-  const res = await fetch('https://api.remove.bg/v1.0/removebg', {
-    method: 'POST',
-    headers: { 'X-Api-Key': process.env.REMOVEBG_API_KEY! },
-    body: form,
-  });
-  if (!res.ok) throw new Error(`remove.bg failed: ${res.status}`);
-  return await res.arrayBuffer();
-}
-```
+### 11.5 Storage (Redis + S3)
 
-### 11.5 Storage (Redis + S3 via aws4fetch)
-
-```ts
-// api/_lib/storage.ts
-import { createClient } from 'redis';
-import { AwsClient } from 'aws4fetch';
-import type { ItemRecord } from '../../src/types';
-
-let _redis: ReturnType<typeof createClient> | null = null
-
-async function getRedis() {
-  if (!_redis) {
-    _redis = await createClient({ url: process.env.REDIS_URL }).connect()
-  }
-  return _redis
-}
-
-function getAws() {
-  return new AwsClient({
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-    region: process.env.AWS_REGION!,
-    service: 's3',
-  })
-}
-
-export const itemKey = (barcode: string) => `item:${barcode}`;
-
-export async function getItem(barcode: string): Promise<ItemRecord | null> {
-  const redis = await getRedis()
-  const val = await redis.get(itemKey(barcode));
-  return val ? JSON.parse(val) as ItemRecord : null;
-}
-
-export async function setItem(item: ItemRecord): Promise<void> {
-  const redis = await getRedis()
-  await redis.set(itemKey(item.barcode), JSON.stringify(item));
-}
-
-export async function uploadToS3(params: {
-  key: string;
-  body: ArrayBuffer | Uint8Array;
-  contentType: string;
-}): Promise<string> {
-  const bucket = process.env.S3_BUCKET!;
-  const region = process.env.AWS_REGION!;
-  const url = `https://${bucket}.s3.${region}.amazonaws.com/${params.key}`;
-  const res = await getAws().fetch(url, {
-    method: 'PUT',
-    body: params.body,
-    headers: { 'Content-Type': params.contentType },
-  });
-  if (!res.ok) throw new Error(`S3 PUT failed: ${res.status}`);
-  return url;
-}
-```
-
-`redis` (node-redis) stores strings, so `setItem`/`getItem` must manually `JSON.stringify`/`JSON.parse` the `ItemRecord`.
+`api/_lib/storage.ts` exports `getItem`, `setItem`, and `uploadToS3`. Redis client and AWS client are lazily initialised (`getRedis()` / `getAws()`) so cold-start connections don't fail. `setItem`/`getItem` manually `JSON.stringify`/`JSON.parse` because node-redis stores strings.
 
 ### 11.6 S3 CORS configuration
 
@@ -530,104 +365,7 @@ The S3 bucket MUST have this CORS config:
 
 ---
 
-## 12. Implementation order
-
-Execute tasks sequentially. Each task lists files touched and a success criterion. Do not start a task until the previous one's success criterion is met.
-
-### Task 1 — Project scaffold and deploy
-**Files:** repo root via `npm create vite@latest`
-**Do:** init Vite React TS, install deps, push to GitHub, connect Vercel.
-**Success:** default Vite page loads at the Vercel preview URL on an iPhone over HTTPS.
-
-### Task 2 — Tailwind v4 setup
-**Files:** `vite.config.ts`, `src/index.css`, `package.json`
-**Do:**
-- `npm install -D tailwindcss @tailwindcss/vite`
-- Add `tailwindcss()` to the `plugins` array in `vite.config.ts`
-- In `src/index.css`, replace any existing content with: `@import "tailwindcss";`
-- Do NOT create `tailwind.config.js` or `postcss.config.js`. Tailwind v4 does not require them by default. If theme customization is needed later, use the `@theme` directive inside `index.css`.
-**Success:** a Tailwind utility class on the default page (e.g. `<h1 className="text-3xl font-bold underline">`) renders as expected.
-
-### Task 3 — Env vars and Redis
-**Files:** Vercel dashboard, `.env`
-**Do:**
-- Add `REDIS_URL` plus the remaining env vars (`APP_PASSWORD`, AWS keys, `S3_BUCKET`, `REMOVEBG_API_KEY`) to both Vercel project settings and `.env`.
-- Run `vercel env pull .env.local` (after `npm i -g vercel` and `vercel link`) to pull all env vars locally.
-- Install client: `npm install redis`
-**Success:** a one-off `tsx` script can `import { createClient } from 'redis'` and read/write a test key via `REDIS_URL`.
-
-### Task 4 — Auth helper
-**Files:** `api/_lib/auth.ts`
-**Do:** implement `requireAuth` per Section 11.1.
-**Success:** importable from a placeholder API route.
-
-### Task 5 — Helper modules
-**Files:** `api/_lib/external.ts`, `api/_lib/storage.ts`
-**Do:**
-- `npm install redis aws4fetch`
-- Implement per Section 11.3, 11.4, 11.5.
-**Success:** each importable with no runtime error. Quick sanity: a one-off `tsx` script calls `lookupExternalProduct('038000138416')` and gets back a name.
-
-### Task 6 — GET endpoint
-**Files:** `api/items/[barcode].ts`
-**Do:** Node runtime, implement per Section 9.1.
-**Success:**
-- `curl -H "x-app-password: <pw>" .../api/items/038000138416` returns `{ exists: false, suggestion: {...} }`
-- Same curl with wrong header returns 401.
-
-### Task 7 — POST endpoint
-**Files:** `api/items/[barcode]/photos.ts`
-**Do:** Node runtime, implement per Section 9.2.
-**Success:** `curl -F view=front -F image=@test.jpg -F name="Test Item" -H "x-app-password: <pw>" .../api/items/123/photos` returns a `processedUrl`; KV record contains both `photo_urls.front` and `raw_photo_urls.front`; S3 contains both `items/123/front-raw.jpg` and `items/123/front-processed.png`.
-
-### Task 8 — Seed script
-**Files:** `scripts/seed.ts`
-**Do:** populate KV with the three seed entries from Section 13.
-**Success:** running `tsx scripts/seed.ts` then `curl` GET against each seeded barcode returns the expected `ItemRecord` with both `photo_urls` and `raw_photo_urls` fields present (filled or empty per the table).
-
-### Task 9 — LoginScreen + App shell
-**Files:** `src/App.tsx`, `src/screens/LoginScreen.tsx`, `src/lib/api.ts`, `src/types.ts`
-**Do:** implement password gate using `sessionStorage`. `<App>` declares three `useState` hooks (`barcode`, `item`, `pendingName`) and a `currentScreen` state. Shows `<LoginScreen>` if no password, else `<ScannerScreen>`.
-**Success:** entering the correct password reveals an empty `<ScannerScreen>` placeholder; wrong password shows an error.
-
-### Task 10 — ScannerScreen (inline scanner + manual entry + already-complete banner)
-**Files:** `src/screens/ScannerScreen.tsx`
-**Do:** rear-camera live scan via `BrowserMultiFormatReader`, format hints `EAN_13, EAN_8, UPC_A, UPC_E`. Include a manual barcode input below the video element. On detection or manual submit, call `getItem` and branch in the parent `<App>`. If response is `{ exists: true, needs_photos: false }`, render an inline banner above the viewfinder with item name, thumbnails of `photo_urls`, and a [Dismiss] button — do not navigate away.
-**Success:** scanning each of the three seeded barcodes routes correctly: Lay's → CaptureScreen, Pringles → CaptureScreen, Coke → banner shown inline.
-
-### Task 11 — Two-way branch after lookup
-**Files:** `src/App.tsx`
-**Do:** after `getItem`:
-- `{ exists: true, item: { needs_photos: false } }` → set state to show inline banner on `ScannerScreen` (no navigation)
-- `{ exists: true, item: { needs_photos: true } }` → set `item` state, navigate to `CaptureScreen`
-- `{ exists: false, suggestion }` → set `pendingName` to `suggestion.name`, navigate to `CaptureScreen`
-**Success:** all three seeded barcodes produce the correct screen state.
-
-### Task 12 — CaptureScreen (viewfinder, resize, blur check, processing overlay)
-**Files:** `src/screens/CaptureScreen.tsx`, `src/lib/resize.ts`, `src/lib/blur.ts`
-**Do:**
-- Rear-camera `<video>`, shutter button captures to `<canvas>`.
-- `resize.ts` produces a JPEG Blob, max dimension 1280px, quality 0.85.
-- `blur.ts` computes Laplacian variance over a grayscale-downsampled copy; threshold ~100 (tune with test shots).
-- If variance below threshold, render an inline overlay with `Retake` / `Use anyway` buttons — never hard-block.
-- On accept, call `postPhoto`; render an inline "Removing background…" overlay until response.
-- After response, update `item` state in `<App>`, clear `pendingName` if set, recompute missing views.
-- Loop until no missing views, then navigate to `SuccessScreen`.
-**Success:** Lay's seed item: capture back (one view), reach SuccessScreen. Pringles seed item: capture front, back, top, reach SuccessScreen.
-
-### Task 13 — SuccessScreen
-**Files:** `src/screens/SuccessScreen.tsx`
-**Do:** show "{item.name} — added to catalog ✓" or "catalog complete ✓" depending on whether this was a new item (had `pendingName` initially) or an existing item; render thumbnails of all `photo_urls`. Include a [Scan another] button that resets `barcode`/`item`/`pendingName` state and returns to `ScannerScreen`.
-**Success:** visually correct on iPhone after both demo capture flows.
-
-### Task 14 — Polish + iOS Safari fixes
-**Files:** as needed
-**Do:** address iPhone-specific issues found during testing (orientation, permission re-prompt after lock, video element sizing).
-**Success:** full demo script (Section 14) runs end-to-end without intervention.
-
----
-
-## 13. Demo seed data
+## 12. Demo seed data
 
 Populated by `scripts/seed.ts` into Redis.
 
@@ -642,14 +380,14 @@ For demo flow #2 (new item / Case 3), scan a real product whose barcode is NOT i
 
 ---
 
-## 14. Demo script (Loom recording path)
+## 13. Demo script (Loom recording path)
 
 Exactly four steps. Total target length: 2–3 minutes.
 
 ### Step 1 — Login + needs some photos (Kirkland Fish Oil, partial)
 1. Open Vercel URL on iPhone, enter password → ScannerScreen
 2. Scan Kirkland Fish Oil (`096619926626`) → server returns item with front filled, back+top empty → app routes to CaptureScreen with `remainingViews = ["back", "top"]`
-3. **Showcase blur rejection here:** deliberately shaky/out-of-focus shot → blur-warning overlay appears → tap Retake → clean shot → "Removing background…" overlay → response
+3. **Showcase blur rejection here:** deliberately shaky/out-of-focus shot → blur-warning overlay appears → tap Retake → clean shot → "Uploading…" overlay → response
 4. Capture top → Processing → SuccessScreen auto-dismisses after 2 seconds → back to ScannerScreen
 
 ### Step 2 — Unknown item, Barcode Lookup API resolves name (case 3)
@@ -669,7 +407,7 @@ Exactly four steps. Total target length: 2–3 minutes.
 
 ---
 
-## 15. Anti-patterns (do NOT do these)
+## 14. Anti-patterns (do NOT do these)
 
 - Do NOT introduce view names other than `"front"`, `"back"`, `"top"` in v1. The set is fixed; the `View` type in `src/types.ts` is the source of truth.
 - Do NOT use `localStorage` for the password (use `sessionStorage` — clears on tab close).
@@ -687,12 +425,74 @@ Exactly four steps. Total target length: 2–3 minutes.
 
 ---
 
-## 16. Troubleshooting / known gotchas
+## 15. Troubleshooting / known gotchas
 
 - **iOS Safari camera fails with `NotAllowedError`** — site must be HTTPS. Vercel preview URLs satisfy this; `localhost` does not.
 - **Multipart form parsing issues** — confirm the route exports `export const config = { runtime: 'nodejs' }` and uses `busboy` or `formidable` to parse the body; `req.body` is not automatically parsed for multipart.
-- **S3 PUT returns CORS error** — bucket CORS must include the Vercel domain and `localhost:5173`; see Section 11.7.
+- **S3 PUT returns CORS error** — bucket CORS must include the Vercel domain and `localhost:5173`; see Section 10.6.
 - **Vercel function body size > 4.5 MB** — client-side resize is mandatory; max dimension 1280px keeps JPEG well under 1 MB.
 - **remove.bg returns 402** — free tier exhausted (50/month). Use the same input for repeated dev tests; remove.bg may charge once per unique image.
 - **ZXing slow to decode** — provide `DecodeHintType.POSSIBLE_FORMATS` with only the four retail formats; do not request all formats.
 - **`BarcodeDetector` returns undefined on iPhone** — expected. iOS Safari does not implement it; use ZXing.
+
+---
+
+## 16. General coding guidelines
+
+> Behavioral guidelines to reduce common LLM coding mistakes. These bias toward caution over speed — use judgment on trivial tasks.
+
+### 16.1 Think before coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them — don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+### 16.2 Simplicity first
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+### 16.3 Surgical changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it — don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+Every changed line should trace directly to the user's request.
+
+### 16.4 Goal-driven execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan before starting:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria allow independent looping. Weak criteria ("make it work") require constant clarification.

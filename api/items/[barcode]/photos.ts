@@ -71,12 +71,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const name = fields.name ?? null
+    const price = fields.price != null ? parseFloat(fields.price) : null
 
     let item = await getItem(barcode)
     if (!item) {
       if (!name) return res.status(400).json({ error: 'name required for new item' })
       item = newItemRecord({ barcode, name })
     }
+    if (price != null && !isNaN(price)) item.price = price
 
     const rawUrl = await uploadToS3({
       key: `items/${barcode}/${view}-raw.jpg`,
