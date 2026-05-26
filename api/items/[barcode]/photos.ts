@@ -10,7 +10,7 @@ export const config = {
   api: { bodyParser: false },
 }
 
-const VALID_VIEWS: View[] = ['front', 'back', 'top']
+const VALID_VIEWS: View[] = ['front', 'back']
 
 function newItemRecord(params: { barcode: string; name: string }): ItemRecord {
   const now = new Date().toISOString()
@@ -18,7 +18,7 @@ function newItemRecord(params: { barcode: string; name: string }): ItemRecord {
     barcode: params.barcode,
     name: params.name,
     needs_photos: true,
-    required_views: ['front', 'back', 'top'],
+    required_views: ['front', 'back'],
     photo_urls: {},
     raw_photo_urls: {},
     created_at: now,
@@ -67,7 +67,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const view = fields.view
     if (!VALID_VIEWS.includes(view as View)) {
-      return res.status(400).json({ error: 'view must be one of: front, back, top' })
+      return res.status(400).json({ error: 'view must be one of: front, back' })
     }
 
     const name = fields.name ?? null

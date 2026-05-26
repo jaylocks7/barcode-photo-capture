@@ -28,7 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           barcode,
           name,
           needs_photos: true,
-          required_views: ['front', 'back', 'top'] as View[],
+          required_views: ['front', 'back'] as View[],
           photo_urls: {},
           raw_photo_urls: {},
           created_at: now,

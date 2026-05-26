@@ -6,6 +6,7 @@ import type { GetItemResponse, ItemRecord } from '../types'
 
 type Props = {
   onScanResult: (barcode: string, result: GetItemResponse) => void
+  onEditItem: (item: ItemRecord) => void
 }
 
 const hints = new Map()
@@ -17,7 +18,7 @@ hints.set(DecodeHintType.POSSIBLE_FORMATS, [
 ])
 hints.set(DecodeHintType.TRY_HARDER, true)
 
-export default function ScannerScreen({ onScanResult }: Props) {
+export default function ScannerScreen({ onScanResult, onEditItem }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const lastBarcodeRef = useRef<string | null>(null)
   const handleBarcodeRef = useRef<(barcode: string) => void>(() => {})
@@ -84,15 +85,23 @@ export default function ScannerScreen({ onScanResult }: Props) {
                 {completeBanner.price != null ? `$${completeBanner.price.toFixed(2)} · ` : ''}already in catalog ✓
               </p>
             </div>
-            <button
-              onClick={() => setCompleteBanner(null)}
-              className="text-sm text-blue-600 ml-4 shrink-0"
-            >
-              Dismiss
-            </button>
+            <div className="flex gap-3 ml-4 shrink-0">
+              <button
+                onClick={() => onEditItem(completeBanner)}
+                className="text-sm text-blue-600"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => setCompleteBanner(null)}
+                className="text-sm text-gray-400"
+              >
+                Dismiss
+              </button>
+            </div>
           </div>
           <div className="flex gap-3">
-            {(['front', 'back', 'top'] as const).map(view => (
+            {(['front', 'back'] as const).map(view => (
               <div key={view} className="flex flex-col items-center gap-1">
                 {completeBanner.photo_urls[view] ? (
                   <img src={completeBanner.photo_urls[view]} crossOrigin="anonymous" className="h-20 w-20 object-contain rounded-lg bg-gray-50" />

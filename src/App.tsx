@@ -18,6 +18,7 @@ export default function App() {
   const [pendingName, setPendingName] = useState<string | null>(null)
   const [pendingPrice, setPendingPrice] = useState<number | null>(null)
   const [wasNewItem, setWasNewItem] = useState(false)
+  const [detailsReturnTo, setDetailsReturnTo] = useState<'capture' | 'scanner'>('capture')
 
   function handleLogin() {
     setCurrentScreen('scanner')
@@ -34,16 +35,21 @@ export default function App() {
       setPendingName(result.suggestion.name)
       setWasNewItem(true)
     }
+    setDetailsReturnTo('capture')
+    setCurrentScreen('details')
+  }
+
+  function handleEditItem(editItem: ItemRecord) {
+    setBarcode(editItem.barcode)
+    setItem(editItem)
+    setPendingName(null)
+    setWasNewItem(false)
+    setDetailsReturnTo('scanner')
     setCurrentScreen('details')
   }
 
   function handleDetailsConfirm(name: string, price: number | null) {
-    setPendingName(name)
-    setPendingPrice(price)
-    setCurrentScreen('capture')
-
-    // Persist immediately so a crash/close before photos doesn't lose name or price.
-    // Fire only when something actually changed (or item is new).
+    // Persist immediately if anything changed (or item is new).
     const isNew = !item
     const nameChanged = name !== item?.name
     const priceChanged = price !== (item?.price ?? null)
@@ -54,6 +60,15 @@ export default function App() {
         .then(result => { if (result?.item) setItem(result.item) })
         .catch(() => {})
     }
+
+    if (detailsReturnTo === 'scanner') {
+      setCurrentScreen('scanner')
+      return
+    }
+
+    setPendingName(name)
+    setPendingPrice(price)
+    setCurrentScreen('capture')
   }
 
   function handlePhotoPosted(updatedItem: ItemRecord) {
@@ -84,7 +99,7 @@ export default function App() {
     return <LoginScreen onLogin={handleLogin} />
   }
   if (currentScreen === 'scanner') {
-    return <ScannerScreen onScanResult={handleScanResult} />
+    return <ScannerScreen onScanResult={handleScanResult} onEditItem={handleEditItem} />
   }
   if (currentScreen === 'details' && barcode) {
     return (
@@ -93,8 +108,13 @@ export default function App() {
         initialName={pendingName ?? item?.name ?? ''}
         initialPrice={item?.price ?? null}
         isNewItem={wasNewItem}
+        confirmLabel={detailsReturnTo === 'scanner' ? 'Save' : 'Start Capture'}
         onConfirm={handleDetailsConfirm}
         onCancel={() => {
+          if (detailsReturnTo === 'scanner') {
+            setCurrentScreen('scanner')
+            return
+          }
           setBarcode(null)
           setItem(null)
           setPendingName(null)

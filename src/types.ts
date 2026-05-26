@@ -1,11 +1,11 @@
-export type View = 'front' | 'back' | 'top';
+export type View = 'front' | 'back';
 
 export type ItemRecord = {
   barcode: string;
   name: string;
   price?: number;                   // optional, set at first capture
   needs_photos: boolean;            // derived at write time
-  required_views: View[];           // any subset of ["front", "back", "top"]
+  required_views: View[];           // any subset of ["front", "back"]
   photo_urls: Partial<Record<View, string>>;     // view -> processed (bg-removed) S3 URL
   raw_photo_urls: Partial<Record<View, string>>; // view -> raw (pre-processing) S3 URL
   created_at: string;               // ISO 8601

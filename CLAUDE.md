@@ -101,10 +101,10 @@ All required. Set in Vercel project settings and in a local `.env` (gitignored).
 - Search by item name
 - Analytics, logging beyond `console.log`, monitoring
 - Product category derivation from barcode scan
-- Per-category photo requirements (all new items require `["front", "back", "top"]` in v1)
+- Per-category photo requirements (all new items require `["front", "back"]` in v1)
 - Confirmation pop-up for Case 1 (item in DB, needs photos): "Item is in DB, needs X photos — proceed?" with Yes/No. Yes routes to CaptureScreen, No returns focus to scanner.
 - Confirmation pop-up for Case 3 (item not in DB): "Item not found — proceed to capture?" with Yes/No. Yes routes to CaptureScreen, No returns focus to scanner.
-- Photo retake flow: (a) scanning a fully-complete item offers the option to recapture any view rather than just showing the banner; (b) during a partial capture session (e.g. item needs only top), cycle through already-captured views first and offer "Retake" or "Keep" before moving to the missing views.
+- Photo retake flow: (a) scanning a fully-complete item offers the option to recapture any view rather than just showing the banner; (b) during a partial capture session, cycle through already-captured views first and offer "Retake" or "Keep" before moving to the missing views.
 
 ---
 
@@ -154,13 +154,13 @@ Create files exactly at these paths. Do not invent new directories.
 ```ts
 // src/types.ts
 
-export type View = 'front' | 'back' | 'top';
+export type View = 'front' | 'back';
 
 export type ItemRecord = {
   barcode: string;
   name: string;
   needs_photos: boolean;            // derived at write time
-  required_views: View[];           // any subset of ["front", "back", "top"]
+  required_views: View[];           // any subset of ["front", "back"]
   photo_urls: Partial<Record<View, string>>;     // view -> processed (bg-removed) S3 URL
   raw_photo_urls: Partial<Record<View, string>>; // view -> raw (pre-processing) S3 URL
   created_at: string;               // ISO 8601
@@ -187,9 +187,9 @@ Cross-screen state lives as three `useState` hooks in `<App>`:
 needs_photos = required_views.some(v => !(v in photo_urls))
 ```
 
-**Allowed views (v1):** `"front"`, `"back"`, `"top"`. No other view names. Server MUST reject any other value with 400.
+**Allowed views (v1):** `"front"`, `"back"`. No other view names. Server MUST reject any other value with 400.
 
-**Default `required_views` for newly-created items:** `["front", "back", "top"]`.
+**Default `required_views` for newly-created items:** `["front", "back"]`.
 
 ---
 
@@ -234,7 +234,7 @@ Trigger: `GET /api/items/:barcode` → `{ exists: false, suggestion: { name: "..
 2. Skip directly to CaptureScreen (no intermediate screen)
 3. First capture:
    POST /api/items/:barcode/photos { view: "front", image, name: pendingName }
-   Server creates the item with required_views: ["front", "back", "top"]
+   Server creates the item with required_views: ["front", "back"]
 4. Clear pendingName after first successful POST
 5. Continue capture loop as in Case 1
 ```
@@ -270,7 +270,7 @@ All routes use Vercel Node runtime. All routes call `requireAuth(req)` first.
 **Request headers:** `x-app-password: <APP_PASSWORD>`
 
 **Request body:** `multipart/form-data` with fields:
-- `view` (string, required) — one of `"front"`, `"back"`, `"top"`. Other values return 400.
+- `view` (string, required) — one of `"front"`, `"back"`. Other values return 400.
 - `image` (File, required) — JPEG, already resized to max 1280px by client
 - `name` (string, optional) — required only when item does not yet exist
 - `skipProcessing` (string `"true"`, optional) — skip remove.bg; stores raw as the processed placeholder. Used by the client on the first fast POST; a background re-POST without this flag triggers remove.bg.
@@ -285,7 +285,7 @@ All routes use Vercel Node runtime. All routes call `requireAuth(req)` first.
 
 // 400 — missing name on new item, or invalid view value
 { "error": "name required for new item" }
-{ "error": "view must be one of: front, back, top" }
+{ "error": "view must be one of: front, back" }
 
 // 401 — auth failure
 { "error": "unauthorized" }
@@ -299,7 +299,7 @@ These are intentional simplifications baked into v1. Do not silently work around
 
 1. **The barcode lookup API always returns a name for any CPG barcode.** v1 uses Open Food Facts, which has imperfect coverage; the helper falls back to `"Unknown Item"` to keep the flow non-breaking. Production behind a paid commercial barcode API would never hit that fallback.
 2. **Background-removed cutouts are the canonical image format.** Confirmed against Company I want to work for's existing catalog.
-3. **The set of valid views is fixed: `"front"`, `"back"`, `"top"`.** All new items default to `["front", "back", "top"]`. Per-category view requirements is a v2 concern.
+3. **The set of valid views is fixed: `"front"`, `"back"`.** All new items default to `["front", "back"]`. Top-view capture is deferred to v2 (remove.bg background removal for top-down shots is unreliable). Per-category view requirements is a v2 concern.
 4. **A single shared password gates the app.** Single env var, validated per-request via `x-app-password` header. Per-user identity is v2.
 5. **Redis represents the global item catalog.** In production this is Company I want to work for's actual DB.
 6. **Single-tenant data model.** No venue-specific overrides on item records in v1.
@@ -371,8 +371,8 @@ Populated by `scripts/seed.ts` into Redis.
 
 | Barcode | Name | required_views | photo_urls state | raw_photo_urls state | Demo role |
 |---|---|---|---|---|---|
-| `096619926626` | Kirkland Fish Oil 1000mg | `["front", "back", "top"]` | front filled, back+top empty | front filled, back+top empty | Demo flow #1 — needs some |
-| `016500558415` | One A Day Mens Multivitamin | `["front", "back", "top"]` | all filled | all filled | Case 2 — already complete, shows inline banner |
+| `096619926626` | Kirkland Fish Oil 1000mg | `["front", "back"]` | front filled, back empty | front filled, back empty | Demo flow #1 — needs some |
+| `016500558415` | One A Day Mens Multivitamin | `["front", "back"]` | all filled | all filled | Case 2 — already complete, shows inline banner |
 
 For seeded items with filled `photo_urls`/`raw_photo_urls`, use any reachable placeholder image URL. The actual image content does not matter for the demo, only that the URLs render in the KV dashboard view.
 
@@ -386,15 +386,15 @@ Exactly four steps. Total target length: 2–3 minutes.
 
 ### Step 1 — Login + needs some photos (Kirkland Fish Oil, partial)
 1. Open Vercel URL on iPhone, enter password → ScannerScreen
-2. Scan Kirkland Fish Oil (`096619926626`) → server returns item with front filled, back+top empty → app routes to CaptureScreen with `remainingViews = ["back", "top"]`
+2. Scan Kirkland Fish Oil (`096619926626`) → server returns item with front filled, back empty → app routes to CaptureScreen with `remainingViews = ["back"]`
 3. **Showcase blur rejection here:** deliberately shaky/out-of-focus shot → blur-warning overlay appears → tap Retake → clean shot → "Uploading…" overlay → response
-4. Capture top → Processing → SuccessScreen auto-dismisses after 2 seconds → back to ScannerScreen
+4. SuccessScreen auto-dismisses after 2 seconds → back to ScannerScreen
 
 ### Step 2 — Unknown item, Barcode Lookup API resolves name (case 3)
 1. Scan a real product whose barcode is NOT in seed data → server returns `{ exists: false, suggestion: { name: "..." } }`
 2. App routes directly to CaptureScreen with `pendingName` set; user does NOT see a name input screen
-3. Capture front (first POST carries `name: pendingName`; server creates the record with `required_views: ["front", "back", "top"]`) → Processing → Capture back → Processing → Capture top → Processing
-4. SuccessScreen shows all three cutouts, auto-dismisses after 2 seconds
+3. Capture front (first POST carries `name: pendingName`; server creates the record with `required_views: ["front", "back"]`) → Processing → Capture back → Processing
+4. SuccessScreen shows both cutouts, auto-dismisses after 2 seconds
 
 ### Step 3 — Already complete (One A Day, case 2)
 1. Scan One A Day Multivitamin (`016500558415`) → inline banner appears on ScannerScreen with item name + photo thumbnails
@@ -409,7 +409,7 @@ Exactly four steps. Total target length: 2–3 minutes.
 
 ## 14. Anti-patterns (do NOT do these)
 
-- Do NOT introduce view names other than `"front"`, `"back"`, `"top"` in v1. The set is fixed; the `View` type in `src/types.ts` is the source of truth.
+- Do NOT introduce view names other than `"front"`, `"back"` in v1. The set is fixed; the `View` type in `src/types.ts` is the source of truth.
 - Do NOT use `localStorage` for the password (use `sessionStorage` — clears on tab close).
 - Do NOT serialize/parse the image bytes through the function as JSON or base64. Use multipart `Request.formData()`.
 - Do NOT call remove.bg from the client (would expose the API key).

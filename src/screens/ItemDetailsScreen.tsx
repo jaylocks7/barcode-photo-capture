@@ -5,11 +5,12 @@ type Props = {
   initialName: string
   initialPrice: number | null
   isNewItem: boolean
+  confirmLabel?: string
   onConfirm: (name: string, price: number | null) => void
   onCancel: () => void
 }
 
-export default function ItemDetailsScreen({ barcode, initialName, initialPrice, isNewItem, onConfirm, onCancel }: Props) {
+export default function ItemDetailsScreen({ barcode, initialName, initialPrice, isNewItem, confirmLabel = 'Start Capture', onConfirm, onCancel }: Props) {
   const [name, setName] = useState(initialName)
   const [priceStr, setPriceStr] = useState(initialPrice != null ? initialPrice.toFixed(2) : '')
 
@@ -63,7 +64,7 @@ export default function ItemDetailsScreen({ barcode, initialName, initialPrice, 
             disabled={!name.trim()}
             className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold text-base disabled:opacity-50"
           >
-            Start Capture
+            {confirmLabel}
           </button>
           <button
             type="button"
