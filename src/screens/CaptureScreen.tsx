@@ -84,14 +84,12 @@ export default function CaptureScreen({ barcode, item, pendingName, pendingPrice
     setIsBlurry(false)
     setIsProcessing(true)
 
-    // Capture these now — they change once onPhotoPosted fires
     const capturedView = currentView
     const capturedName = pendingName
     const capturedPrice = pendingPrice
 
     try {
-      // Post raw immediately with skipProcessing — server stores raw as placeholder, returns fast.
-      const result = await postPhoto(barcode, capturedView, rawBlob, { name: capturedName ?? undefined, price: capturedPrice ?? undefined, skipProcessing: true })
+      const result = await postPhoto(barcode, capturedView, rawBlob, { name: capturedName ?? undefined, price: capturedPrice ?? undefined })
       if (result.item) {
         onPhotoPosted(result.item)
       }
@@ -101,12 +99,6 @@ export default function CaptureScreen({ barcode, item, pendingName, pendingPrice
       retake(blobUrl)
       setIsProcessing(false)
     }
-
-    // Background task: re-post without skipProcessing so the server calls remove.bg.
-    // Calls onPhotoPosted again so App state (and SuccessScreen) updates with the cutout URL.
-    postPhoto(barcode, capturedView, rawBlob)
-      .then(result => { if (result?.item) onPhotoPosted(result.item) })
-      .catch(() => {})
   }
 
   if (!currentView) return null
@@ -169,7 +161,7 @@ export default function CaptureScreen({ barcode, item, pendingName, pendingPrice
         )}
         {isProcessing && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/70">
-            <p className="text-white text-lg">Uploading…</p>
+            <p className="text-white text-lg">Processing…</p>
           </div>
         )}
       </div>

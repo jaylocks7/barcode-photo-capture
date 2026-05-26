@@ -106,6 +106,7 @@ All required. Set in Vercel project settings and in a local `.env` (gitignored).
 - Confirmation pop-up for Case 3 (item not in DB): "Item not found — proceed to capture?" with Yes/No. Yes routes to CaptureScreen, No returns focus to scanner.
 - Photo retake flow: (a) scanning a fully-complete item offers the option to recapture any view rather than just showing the banner; (b) during a partial capture session, cycle through already-captured views first and offer "Retake" or "Keep" before moving to the missing views.
 - Additional photos beyond the two required views (e.g. detail shots, alternate angles) — v1 captures exactly `required_views` and no more.
+- Background fire-and-forget remove.bg processing: skip remove.bg on non-last captures via `skipProcessing: true` for a fast initial POST, then re-POST without the flag in the background to trigger remove.bg. v1 processes each capture synchronously.
 
 ---
 
