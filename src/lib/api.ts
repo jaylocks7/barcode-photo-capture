@@ -1,4 +1,4 @@
-import type { GetItemResponse, PostPhotoResponse } from '../types'
+import type { GetItemResponse, ItemRecord, PostPhotoResponse } from '../types'
 
 function authHeader(): Record<string, string> {
   const password = sessionStorage.getItem('app_password') || ''
@@ -13,6 +13,18 @@ export async function getItem(barcode: string): Promise<GetItemResponse> {
     sessionStorage.removeItem('app_password')
     window.location.reload()
   }
+  return res.json()
+}
+
+export async function patchItem(
+  barcode: string,
+  patch: { name?: string; price?: number }
+): Promise<{ item: ItemRecord }> {
+  const res = await fetch(`/api/items/${encodeURIComponent(barcode)}`, {
+    method: 'PATCH',
+    headers: { ...authHeader(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  })
   return res.json()
 }
 

@@ -77,24 +77,32 @@ export default function ScannerScreen({ onScanResult }: Props) {
     <div className="h-dvh bg-black flex flex-col">
       {completeBanner && (
         <div className="bg-white border-b border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <span className="font-medium text-gray-900">
-              {completeBanner.name}
-              {completeBanner.price != null && (
-                <span className="ml-2 text-gray-500 font-normal">${completeBanner.price.toFixed(2)}</span>
-              )}
-              {' — '}already in catalog ✓
-            </span>
+          <div className="flex items-start justify-between mb-3">
+            <div>
+              <p className="font-medium text-gray-900">{completeBanner.name}</p>
+              <p className="text-sm text-gray-500">
+                {completeBanner.price != null ? `$${completeBanner.price.toFixed(2)} · ` : ''}already in catalog ✓
+              </p>
+            </div>
             <button
               onClick={() => setCompleteBanner(null)}
-              className="text-sm text-blue-600 ml-4"
+              className="text-sm text-blue-600 ml-4 shrink-0"
             >
               Dismiss
             </button>
           </div>
-          <div className="flex gap-2 overflow-x-auto">
-            {Object.values(completeBanner.photo_urls).map((url, i) => (
-              <img key={i} src={url} crossOrigin="anonymous" className="h-20 w-20 object-contain rounded-lg bg-gray-50" />
+          <div className="flex gap-3">
+            {(['front', 'back', 'top'] as const).map(view => (
+              <div key={view} className="flex flex-col items-center gap-1">
+                {completeBanner.photo_urls[view] ? (
+                  <img src={completeBanner.photo_urls[view]} crossOrigin="anonymous" className="h-20 w-20 object-contain rounded-lg bg-gray-50" />
+                ) : (
+                  <div className="h-20 w-20 rounded-lg bg-gray-100 flex items-center justify-center">
+                    <span className="text-xs text-gray-400">—</span>
+                  </div>
+                )}
+                <span className="text-xs text-gray-500 capitalize">{view}</span>
+              </div>
             ))}
           </div>
         </div>

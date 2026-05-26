@@ -77,6 +77,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!item) {
       if (!name) return res.status(400).json({ error: 'name required for new item' })
       item = newItemRecord({ barcode, name })
+    } else if (name) {
+      item.name = name
     }
     if (price != null && !isNaN(price)) item.price = price
 

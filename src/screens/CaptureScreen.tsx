@@ -8,11 +8,12 @@ type Props = {
   barcode: string
   item: ItemRecord | null
   pendingName: string | null
+  pendingPrice: number | null
   onPhotoPosted: (updatedItem: ItemRecord) => void
   onComplete: () => void
 }
 
-export default function CaptureScreen({ barcode, item, pendingName, onPhotoPosted }: Props) {
+export default function CaptureScreen({ barcode, item, pendingName, pendingPrice, onPhotoPosted }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null)
@@ -20,13 +21,13 @@ export default function CaptureScreen({ barcode, item, pendingName, onPhotoPoste
   const [isBlurry, setIsBlurry] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [showTip, setShowTip] = useState(() => !sessionStorage.getItem('capture_tip_shown'))
-  const [pendingPrice, setPendingPrice] = useState('')
 
   const missingViews: View[] = item
     ? (item.required_views.filter(v => !(v in item.photo_urls)) as View[])
     : ['front']
   const currentView = missingViews[0]
-  const itemName = item?.name ?? pendingName ?? 'Unknown Item'
+  const itemName = pendingName ?? item?.name ?? 'Unknown Item'
+  const displayPrice = pendingPrice ?? item?.price ?? null
 
   useEffect(() => {
     let active = true
@@ -86,11 +87,11 @@ export default function CaptureScreen({ barcode, item, pendingName, onPhotoPoste
     // Capture these now — they change once onPhotoPosted fires
     const capturedView = currentView
     const capturedName = pendingName
+    const capturedPrice = pendingPrice
 
     try {
       // Post raw immediately with skipProcessing — server stores raw as placeholder, returns fast.
-      const price = pendingName && pendingPrice !== '' ? parseFloat(pendingPrice) : undefined
-      const result = await postPhoto(barcode, capturedView, rawBlob, { name: capturedName ?? undefined, price, skipProcessing: true })
+      const result = await postPhoto(barcode, capturedView, rawBlob, { name: capturedName ?? undefined, price: capturedPrice ?? undefined, skipProcessing: true })
       if (result.item) {
         onPhotoPosted(result.item)
       }
@@ -113,21 +114,13 @@ export default function CaptureScreen({ barcode, item, pendingName, onPhotoPoste
   return (
     <div className="h-dvh bg-black flex flex-col">
       <div className="bg-white px-4 py-3">
-        <p className="font-medium text-gray-900 truncate">{itemName}</p>
+        <div className="flex items-baseline gap-2">
+          <p className="font-medium text-gray-900 truncate">{itemName}</p>
+          {displayPrice != null && (
+            <p className="text-sm text-gray-500 shrink-0">${displayPrice.toFixed(2)}</p>
+          )}
+        </div>
         <p className="text-sm text-gray-500 capitalize">Capturing: {currentView}</p>
-        {pendingName && (
-          <div className="mt-2 flex items-center gap-2">
-            <span className="text-sm text-gray-500">Price</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              placeholder="0.00"
-              value={pendingPrice}
-              onChange={e => setPendingPrice(e.target.value)}
-              className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-24"
-            />
-          </div>
-        )}
       </div>
 
       <div className="relative flex-1">

@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import LoginScreen from './screens/LoginScreen'
 import ScannerScreen from './screens/ScannerScreen'
+import ItemDetailsScreen from './screens/ItemDetailsScreen'
 import CaptureScreen from './screens/CaptureScreen'
 import SuccessScreen from './screens/SuccessScreen'
+import { patchItem } from './lib/api'
 import type { ItemRecord, GetItemResponse } from './types'
 
-type Screen = 'login' | 'scanner' | 'capture' | 'success'
+type Screen = 'login' | 'scanner' | 'details' | 'capture' | 'success'
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>(
@@ -14,6 +16,7 @@ export default function App() {
   const [barcode, setBarcode] = useState<string | null>(null)
   const [item, setItem] = useState<ItemRecord | null>(null)
   const [pendingName, setPendingName] = useState<string | null>(null)
+  const [pendingPrice, setPendingPrice] = useState<number | null>(null)
   const [wasNewItem, setWasNewItem] = useState(false)
 
   function handleLogin() {
@@ -23,17 +26,33 @@ export default function App() {
   function handleScanResult(scannedBarcode: string, result: GetItemResponse) {
     setBarcode(scannedBarcode)
     if (result.exists) {
-      if (result.item.needs_photos) {
-        setItem(result.item)
-        setPendingName(null)
-        setWasNewItem(false)
-        setCurrentScreen('capture')
-      }
+      setItem(result.item)
+      setPendingName(null)
+      setWasNewItem(false)
     } else {
       setItem(null)
       setPendingName(result.suggestion.name)
       setWasNewItem(true)
-      setCurrentScreen('capture')
+    }
+    setCurrentScreen('details')
+  }
+
+  function handleDetailsConfirm(name: string, price: number | null) {
+    setPendingName(name)
+    setPendingPrice(price)
+    setCurrentScreen('capture')
+
+    // Persist immediately so a crash/close before photos doesn't lose name or price.
+    // Fire only when something actually changed (or item is new).
+    const isNew = !item
+    const nameChanged = name !== item?.name
+    const priceChanged = price !== (item?.price ?? null)
+    if (isNew || nameChanged || priceChanged) {
+      const patch: { name: string; price?: number } = { name }
+      if (price != null) patch.price = price
+      patchItem(barcode!, patch)
+        .then(result => { if (result?.item) setItem(result.item) })
+        .catch(() => {})
     }
   }
 
@@ -41,6 +60,7 @@ export default function App() {
     if (!updatedItem) return
     setItem(updatedItem)
     setPendingName(null)
+    setPendingPrice(null)
     const missing = updatedItem.required_views.filter(v => !(v in updatedItem.photo_urls))
     if (missing.length === 0) {
       setCurrentScreen('success')
@@ -55,6 +75,7 @@ export default function App() {
     setBarcode(null)
     setItem(null)
     setPendingName(null)
+    setPendingPrice(null)
     setWasNewItem(false)
     setCurrentScreen('scanner')
   }
@@ -65,12 +86,31 @@ export default function App() {
   if (currentScreen === 'scanner') {
     return <ScannerScreen onScanResult={handleScanResult} />
   }
+  if (currentScreen === 'details' && barcode) {
+    return (
+      <ItemDetailsScreen
+        barcode={barcode}
+        initialName={pendingName ?? item?.name ?? ''}
+        initialPrice={item?.price ?? null}
+        isNewItem={wasNewItem}
+        onConfirm={handleDetailsConfirm}
+        onCancel={() => {
+          setBarcode(null)
+          setItem(null)
+          setPendingName(null)
+          setWasNewItem(false)
+          setCurrentScreen('scanner')
+        }}
+      />
+    )
+  }
   if (currentScreen === 'capture' && barcode) {
     return (
       <CaptureScreen
         barcode={barcode}
         item={item}
         pendingName={pendingName}
+        pendingPrice={pendingPrice}
         onPhotoPosted={handlePhotoPosted}
         onComplete={handleCaptureComplete}
       />
