@@ -17,6 +17,7 @@ export async function callRemoveBg(imageBytes: ArrayBuffer | Buffer): Promise<Ar
   const form = new FormData()
   form.append('image_file', new Blob([imageBytes], { type: 'image/jpeg' }), 'capture.jpg')
   form.append('size', 'auto')
+  form.append('format', 'jpg')
   const res = await fetch('https://api.remove.bg/v1.0/removebg', {
     method: 'POST',
     headers: { 'X-Api-Key': process.env.REMOVEBG_API_KEY! },

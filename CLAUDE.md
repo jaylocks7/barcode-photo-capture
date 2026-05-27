@@ -74,8 +74,7 @@ All required. Set in Vercel project settings and in a local `.env` (gitignored).
 1. Single-password gate over all API routes via `x-app-password` header
 2. `LoginScreen` that stores the password in `sessionStorage`
 3. Barcode scanning via `BrowserMultiFormatReader` with rear camera
-4. Manual barcode entry text input as fallback on `ScannerScreen`
-5. `GET /api/items/:barcode` — checks Redis, falls back to Open Food Facts for the suggestion
+4. `GET /api/items/:barcode` — checks Redis, falls back to Barcode Lookup API for the suggestion
 6. `POST /api/items/:barcode/photos` — accepts multipart with `view`, `image`, optional `name`; calls remove.bg; uploads cutout to S3; updates KV
 7. Three user flows (Section 8): existing+complete, existing+needs photos, new item
 8. Photo capture per required view with client-side resize to max 1280px before send
@@ -107,6 +106,7 @@ All required. Set in Vercel project settings and in a local `.env` (gitignored).
 - Photo retake flow: (a) scanning a fully-complete item offers the option to recapture any view rather than just showing the banner; (b) during a partial capture session, cycle through already-captured views first and offer "Retake" or "Keep" before moving to the missing views.
 - Additional photos beyond the two required views (e.g. detail shots, alternate angles) — v1 captures exactly `required_views` and no more.
 - Background fire-and-forget remove.bg processing: skip remove.bg on non-last captures via `skipProcessing: true` for a fast initial POST, then re-POST without the flag in the background to trigger remove.bg. v1 processes each capture synchronously.
+- Manual barcode entry text input as fallback on `ScannerScreen`. v1 scan-only.
 
 ---
 
@@ -120,7 +120,7 @@ Create files exactly at these paths. Do not invent new directories.
 │   ├── _lib/
 │   │   ├── auth.ts                 # requireAuth(req) helper
 │   │   ├── storage.ts              # Redis read/write + S3 upload via aws4fetch
-│   │   └── external.ts             # Open Food Facts lookup + remove.bg call
+│   │   └── external.ts             # Barcode Lookup API + remove.bg call
 │   └── items/
 │       ├── [barcode].ts            # GET — lookup
 │       └── [barcode]/
@@ -260,7 +260,7 @@ All routes use Vercel Node runtime. All routes call `requireAuth(req)` first.
 // 200 — exists in our catalog
 { "exists": true, "item": { /* ItemRecord */ } }
 
-// 200 — not in our catalog, suggestion via Open Food Facts
+// 200 — not in our catalog, suggestion via Barcode Lookup API
 { "exists": false, "suggestion": { "name": "Pringles Original" } }
 
 // 401 — missing or wrong password
@@ -299,7 +299,7 @@ All routes use Vercel Node runtime. All routes call `requireAuth(req)` first.
 
 These are intentional simplifications baked into v1. Do not silently work around them.
 
-1. **The barcode lookup API always returns a name for any CPG barcode.** v1 uses Open Food Facts, which has imperfect coverage; the helper falls back to `"Unknown Item"` to keep the flow non-breaking. Production behind a paid commercial barcode API would never hit that fallback.
+1. **The Barcode Lookup API always returns a name for any CPG barcode.** The helper falls back to `"Unknown Item"` on any error to keep the flow non-breaking.
 2. **Background-removed cutouts are the canonical image format.** Confirmed against Company I want to work for's existing catalog.
 3. **The set of valid views is fixed: `"front"`, `"back"`.** All new items default to `["front", "back"]`. Top-view capture is deferred to v2 (remove.bg background removal for top-down shots is unreliable). Per-category view requirements is a v2 concern.
 4. **A single shared password gates the app.** Single env var, validated per-request via `x-app-password` header. Per-user identity is v2.

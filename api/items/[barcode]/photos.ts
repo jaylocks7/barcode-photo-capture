@@ -26,26 +26,21 @@ function newItemRecord(params: { barcode: string; name: string }): ItemRecord {
   }
 }
 
-function parseForm(req: VercelRequest): Promise<{ fields: Record<string, string>; imageBuffer: Buffer; processedBuffer: Buffer | null; skipProcessing: boolean }> {
+function parseForm(req: VercelRequest): Promise<{ fields: Record<string, string>; imageBuffer: Buffer }> {
   return new Promise((resolve, reject) => {
     const bb = Busboy({ headers: req.headers as Record<string, string> })
     const fields: Record<string, string> = {}
     let imageBuffer: Buffer | null = null
-    let processedBuffer: Buffer | null = null
 
     bb.on('field', (name, value) => { fields[name] = value })
-    bb.on('file', (name, file) => {
+    bb.on('file', (_name, file) => {
       const chunks: Buffer[] = []
       file.on('data', (chunk: Buffer) => chunks.push(chunk))
-      file.on('end', () => {
-        const buf = Buffer.concat(chunks)
-        if (name === 'image') imageBuffer = buf
-        else if (name === 'processedImage') processedBuffer = buf
-      })
+      file.on('end', () => { imageBuffer = Buffer.concat(chunks) })
     })
     bb.on('finish', () => {
       if (!imageBuffer) return reject(new Error('no image in request'))
-      resolve({ fields, imageBuffer, processedBuffer, skipProcessing: fields.skipProcessing === 'true' })
+      resolve({ fields, imageBuffer })
     })
     bb.on('error', reject)
 
@@ -63,7 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const barcode = req.query.barcode as string
-    const { fields, imageBuffer, processedBuffer, skipProcessing } = await parseForm(req)
+    const { fields, imageBuffer } = await parseForm(req)
 
     const view = fields.view
     if (!VALID_VIEWS.includes(view as View)) {
@@ -88,17 +83,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       contentType: 'image/jpeg',
     })
 
-    // skipProcessing=true: raw stored as placeholder, UI advances fast.
-    // Background task re-posts without the flag so remove.bg runs then.
-    const cutoutBuffer = skipProcessing
-      ? imageBuffer
-      : processedBuffer ?? await callRemoveBg(imageBuffer)
-    const cutoutContentType = skipProcessing || !processedBuffer ? 'image/jpeg' : 'image/png'
+    const cutoutBuffer = await callRemoveBg(imageBuffer)
 
     const processedUrl = await uploadToS3({
-      key: `items/${barcode}/${view}-processed.png`,
+      key: `items/${barcode}/${view}-processed.jpg`,
       body: new Uint8Array(cutoutBuffer),
-      contentType: cutoutContentType,
+      contentType: 'image/jpeg',
     })
 
     item.raw_photo_urls[view as View] = rawUrl
