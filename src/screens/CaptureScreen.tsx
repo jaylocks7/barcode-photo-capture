@@ -73,7 +73,7 @@ export default function CaptureScreen({ barcode, item, pendingName, pendingPrice
     setCapturedBlob(blob)
     setCapturedUrl(url)
 
-    if (variance < 100) {
+    if (variance < 300) {
       setIsBlurry(true)
     } else {
       await submitPhoto(blob, url)

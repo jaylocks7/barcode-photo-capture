@@ -46,13 +46,14 @@ export default function ItemDetailsScreen({ barcode, initialName, initialPrice, 
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 select-none">$</span>
             <input
-              type="number"
+              type="text"
               inputMode="decimal"
-              step="0.01"
-              min="0"
               placeholder="0.00"
               value={priceStr}
-              onChange={e => setPriceStr(e.target.value)}
+              onChange={e => {
+                const v = e.target.value
+                if (/^\d*(\.\d{0,2})?$/.test(v)) setPriceStr(v)
+              }}
               className="w-full border border-gray-300 rounded-lg pl-7 pr-3 py-2 text-base"
             />
           </div>
