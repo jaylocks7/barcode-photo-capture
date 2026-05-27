@@ -30,16 +30,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           needs_photos: true,
           required_views: ['front', 'back'] as View[],
           photo_urls: {},
-          raw_photo_urls: {},
           created_at: now,
           updated_at: now,
         }
       } else {
         if (name) item.name = name
       }
-      if (price !== null) item.price = price
-      item.updated_at = new Date().toISOString()
-      await setItem(item)
+      if (price !== null) item!.price = price
+      item!.updated_at = new Date().toISOString()
+      await setItem(item!)
       return res.json({ item })
     }
 

@@ -20,7 +20,6 @@ function newItemRecord(params: { barcode: string; name: string }): ItemRecord {
     needs_photos: true,
     required_views: ['front', 'back'],
     photo_urls: {},
-    raw_photo_urls: {},
     created_at: now,
     updated_at: now,
   }
