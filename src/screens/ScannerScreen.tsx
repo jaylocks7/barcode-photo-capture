@@ -23,6 +23,7 @@ export default function ScannerScreen({ onScanResult, onEditItem }: Props) {
   const lastBarcodeRef = useRef<string | null>(null)
   const handleBarcodeRef = useRef<(barcode: string) => void>(() => {})
   const [loading, setLoading] = useState(false)
+  const [manualBarcode, setManualBarcode] = useState('')
   const [completeBanner, setCompleteBanner] = useState<ItemRecord | null>(null)
   const [debugBarcode, setDebugBarcode] = useState<string | null>(null)
 
@@ -65,6 +66,13 @@ export default function ScannerScreen({ onScanResult, onEditItem }: Props) {
   }
 
   handleBarcodeRef.current = handleBarcode
+
+  function handleManualSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!manualBarcode.trim()) return
+    handleBarcode(manualBarcode.trim())
+    setManualBarcode('')
+  }
 
   return (
     <div className="h-dvh bg-black flex flex-col">
@@ -129,6 +137,25 @@ export default function ScannerScreen({ onScanResult, onEditItem }: Props) {
         </div>
       )}
 
+      <div className="bg-white p-4">
+        <form onSubmit={handleManualSubmit} className="flex gap-2">
+          <input
+            type="text"
+            placeholder="Enter barcode manually"
+            value={manualBarcode}
+            onChange={e => setManualBarcode(e.target.value)}
+            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-base"
+            inputMode="numeric"
+          />
+          <button
+            type="submit"
+            disabled={!manualBarcode.trim() || loading}
+            className="bg-blue-600 text-white rounded-lg px-4 py-2 font-medium disabled:opacity-50"
+          >
+            Go
+          </button>
+        </form>
+      </div>
     </div>
   )
 }

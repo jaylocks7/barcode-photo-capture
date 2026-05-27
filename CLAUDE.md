@@ -74,13 +74,14 @@ All required. Set in Vercel project settings and in a local `.env` (gitignored).
 1. Single-password gate over all API routes via `x-app-password` header
 2. `LoginScreen` that stores the password in `sessionStorage`
 3. Barcode scanning via `BrowserMultiFormatReader` with rear camera
-4. `GET /api/items/:barcode` — checks Redis, falls back to Barcode Lookup API for the suggestion
+4. Manual barcode entry text input as fallback on `ScannerScreen`
+5. `GET /api/items/:barcode` — checks Redis, falls back to Barcode Lookup API for the suggestion
 6. `POST /api/items/:barcode/photos` — accepts multipart with `view`, `image`, optional `name`; calls remove.bg; uploads cutout to S3; updates KV
 7. Three user flows (Section 8): existing+complete, existing+needs photos, new item
 8. Photo capture per required view with client-side resize to max 1280px before send
 9. Blur detection via Laplacian variance — blurry shots show a Retake-only overlay (no override)
 10. Background removal via remove.bg, server-side
-11. Preserve both raw and background-removed images in S3 (`{view}-raw.jpg` and `{view}-processed.png`) — both URLs stored on the item record
+11. Store background-removed image in S3 (`{view}-processed.jpg`) — URL stored on the item record
 12. Success screen showing the cutout(s)
 
 ### 5.2 Out of scope (v1) — do not build these
@@ -106,7 +107,6 @@ All required. Set in Vercel project settings and in a local `.env` (gitignored).
 - Photo retake flow: (a) scanning a fully-complete item offers the option to recapture any view rather than just showing the banner; (b) during a partial capture session, cycle through already-captured views first and offer "Retake" or "Keep" before moving to the missing views.
 - Additional photos beyond the two required views (e.g. detail shots, alternate angles) — v1 captures exactly `required_views` and no more.
 - Background fire-and-forget remove.bg processing: skip remove.bg on non-last captures via `skipProcessing: true` for a fast initial POST, then re-POST without the flag in the background to trigger remove.bg. v1 processes each capture synchronously.
-- Manual barcode entry text input as fallback on `ScannerScreen`. v1 scan-only.
 
 ---
 
@@ -163,8 +163,7 @@ export type ItemRecord = {
   name: string;
   needs_photos: boolean;            // derived at write time
   required_views: View[];           // any subset of ["front", "back"]
-  photo_urls: Partial<Record<View, string>>;     // view -> processed (bg-removed) S3 URL
-  raw_photo_urls: Partial<Record<View, string>>; // view -> raw (pre-processing) S3 URL
+  photo_urls: Partial<Record<View, string>>;     // view -> bg-removed S3 URL
   created_at: string;               // ISO 8601
   updated_at: string;               // ISO 8601
 };
@@ -275,13 +274,12 @@ All routes use Vercel Node runtime. All routes call `requireAuth(req)` first.
 - `view` (string, required) — one of `"front"`, `"back"`. Other values return 400.
 - `image` (File, required) — JPEG, already resized to max 1280px by client
 - `name` (string, optional) — required only when item does not yet exist
-- `skipProcessing` (string `"true"`, optional) — skip remove.bg; stores raw as the processed placeholder. Used by the client on the first fast POST; a background re-POST without this flag triggers remove.bg.
 
 **Responses:**
 ```json
 // 200
 {
-  "processedUrl": "https://<bucket>.s3.amazonaws.com/items/<barcode>/<view>-processed.png",
+  "processedUrl": "https://<bucket>.s3.amazonaws.com/items/<barcode>/<view>-processed.jpg",
   "item": { /* updated ItemRecord */ }
 }
 
@@ -338,7 +336,7 @@ All frontend API calls go through `src/lib/api.ts`. Do not call `fetch` directly
 
 ### 11.4 remove.bg call
 
-`callRemoveBg(imageBytes)` in `api/_lib/external.ts` POSTs the JPEG bytes to `https://api.remove.bg/v1.0/removebg` and returns the PNG `ArrayBuffer`. The client captures as JPEG (`resize.ts`, quality 0.85); raw JPEG is stored as `{view}-raw.jpg`, processed PNG as `{view}-processed.png`.
+`callRemoveBg(imageBytes)` in `api/_lib/external.ts` POSTs the JPEG bytes to `https://api.remove.bg/v1.0/removebg` with `format=jpg` and returns the JPEG `ArrayBuffer`, stored as `{view}-processed.jpg`.
 
 ### 11.5 Storage (Redis + S3)
 
@@ -371,12 +369,12 @@ The S3 bucket MUST have this CORS config:
 
 Populated by `scripts/seed.ts` into Redis.
 
-| Barcode | Name | required_views | photo_urls state | raw_photo_urls state | Demo role |
-|---|---|---|---|---|---|
-| `096619926626` | Kirkland Fish Oil 1000mg | `["front", "back"]` | front filled, back empty | front filled, back empty | Demo flow #1 — needs some |
-| `016500558415` | One A Day Mens Multivitamin | `["front", "back"]` | all filled | all filled | Case 2 — already complete, shows inline banner |
+| Barcode | Name | required_views | photo_urls state | Demo role |
+|---|---|---|---|---|
+| `096619926626` | Kirkland Fish Oil 1000mg | `["front", "back"]` | front filled, back empty | Demo flow #1 — needs some |
+| `016500558415` | One A Day Mens Multivitamin | `["front", "back"]` | all filled | Case 2 — already complete, shows inline banner |
 
-For seeded items with filled `photo_urls`/`raw_photo_urls`, use any reachable placeholder image URL. The actual image content does not matter for the demo, only that the URLs render in the KV dashboard view.
+For seeded items with filled `photo_urls`, use any reachable placeholder image URL. The actual image content does not matter for the demo, only that the URLs render in the KV dashboard view.
 
 For demo flow #2 (new item / Case 3), scan a real product whose barcode is NOT in the seed data. Verify it exists in the Barcode Lookup API before recording.
 
@@ -404,8 +402,8 @@ Exactly four steps. Total target length: 2–3 minutes.
 
 ### Step 4 — Show off the DB
 1. Open the Redis console in a browser tab
-2. Open the record for the item created in Step 2 — show the JSON: `name`, `required_views`, `photo_urls`, `raw_photo_urls`, timestamps
-3. Click an S3 URL to open in a new tab. Show the raw JPEG and the bg-removed PNG side by side — emphasize the before/after as the visual payoff
+2. Open the record for the item created in Step 2 — show the JSON: `name`, `required_views`, `photo_urls`, timestamps
+3. Click an S3 URL to open in a new tab — show the bg-removed JPEG cutout
 
 ---
 
@@ -419,7 +417,7 @@ Exactly four steps. Total target length: 2–3 minutes.
 - Do NOT add a `/api/auth` endpoint. Auth is per-request via header, not session-based.
 - Do NOT use Edge runtime for any Vercel function. All routes use Node runtime (`export const config = { runtime: 'nodejs' }`). The `redis` package requires Node TCP and is incompatible with Edge.
 - Do NOT introduce React Router. Use a `currentScreen` state variable in `<App>`.
-- Do NOT store ONLY the processed cutout. Raw (pre-processing) image MUST also be persisted to S3 under `{view}-raw.jpg` and its URL stored in `raw_photo_urls[view]`. This supports the demo's "show off the DB" step and provides an audit trail.
+- Do NOT store raw pre-processing images. Only the bg-removed JPEG (`{view}-processed.jpg`) is stored in S3.
 - Do NOT compute `needs_photos` at read time. Always derived and persisted at write time.
 - Do NOT add upload progress indicators, retry buttons, or offline detection in v1.
 - Do NOT auto-advance from the blur-warning overlay. The user must tap Retake. There is no "Use Anyway" option.

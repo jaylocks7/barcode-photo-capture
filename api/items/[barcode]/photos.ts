@@ -77,12 +77,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     if (price != null && !isNaN(price)) item.price = price
 
-    const rawUrl = await uploadToS3({
-      key: `items/${barcode}/${view}-raw.jpg`,
-      body: imageBuffer,
-      contentType: 'image/jpeg',
-    })
-
     const cutoutBuffer = await callRemoveBg(imageBuffer)
 
     const processedUrl = await uploadToS3({
@@ -91,7 +85,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       contentType: 'image/jpeg',
     })
 
-    item.raw_photo_urls[view as View] = rawUrl
     item.photo_urls[view as View] = processedUrl
     item.needs_photos = item.required_views.some(v => !(v in item!.photo_urls))
     item.updated_at = new Date().toISOString()
