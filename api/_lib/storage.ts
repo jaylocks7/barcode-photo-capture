@@ -21,6 +21,19 @@ function getAws() {
 }
 
 export const itemKey = (barcode: string) => `item:${barcode}`
+export const suggestionKey = (barcode: string) => `suggestion:${barcode}`
+
+export async function getCachedSuggestion(barcode: string): Promise<{ name: string } | null> {
+  const redis = await getRedis()
+  const val = await redis.get(suggestionKey(barcode))
+  return val ? JSON.parse(val) : null
+}
+
+export async function cacheSuggestion(barcode: string, suggestion: { name: string }): Promise<void> {
+  const redis = await getRedis()
+  // ponytail: EX 86400 = 24h TTL
+  await redis.set(suggestionKey(barcode), JSON.stringify(suggestion), { EX: 86400 })
+}
 
 export async function getItem(barcode: string): Promise<ItemRecord | null> {
   const redis = await getRedis()

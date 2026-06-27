@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { requireAuth } from '../_lib/auth.js'
-import { getItem, setItem } from '../_lib/storage.js'
+import { getItem, setItem, getCachedSuggestion, cacheSuggestion } from '../_lib/storage.js'
 import { lookupExternalProduct } from '../_lib/external.js'
 import type { View } from '../../src/types.js'
 
@@ -48,7 +48,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ exists: true, item })
     }
 
-    const suggestion = await lookupExternalProduct(barcode)
+    const cached = await getCachedSuggestion(barcode)
+    const suggestion = cached ?? await lookupExternalProduct(barcode)
+    if (!cached) await cacheSuggestion(barcode, suggestion)
     return res.json({ exists: false, suggestion })
   } catch (err) {
     console.error(err)

@@ -4,6 +4,51 @@
 
 ---
 
+## 0. Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                      Client — PWA (iPhone)                       │
+│                                                                  │
+│   LoginScreen ──► ScannerScreen ──► CaptureScreen ──► SuccessScreen
+│                       │                   │                      │
+│                   ZXing (UPC)       getUserMedia           show cutouts
+│                   manual entry      canvas resize                │
+│                                     blur detect                  │
+└───────────────────────────┬──────────────────────────────────────┘
+                            │  HTTPS  x-app-password header
+                            │  multipart/form-data (photos)
+              ┌─────────────▼──────────────────┐
+              │      Vercel Serverless (Node)   │
+              │                                 │
+              │  GET  /api/items/:barcode        │
+              │  POST /api/items/:barcode/photos │
+              │  PATCH /api/items/:barcode       │
+              └──────┬──────────────────┬───────┘
+                     │                  │
+        ┌────────────▼──────┐  ┌────────▼─────────────────────┐
+        │       Redis        │  │        External APIs          │
+        │                   │  │                               │
+        │  item:{barcode}   │  │  Barcode Lookup API           │
+        │  suggestion:{bc}  │  │  → product name suggestion    │
+        │  (24h TTL)        │  │                               │
+        │                   │  │  remove.bg                    │
+        │  ── v2 ──         │  │  → background-removed JPEG    │
+        │  session:{token}  │  └───────────────────────────────┘
+        │  rl:new:{uid}:{d} │
+        └───────────────────┘  ┌───────────────────────────────┐
+                               │          AWS S3                │
+                               │                               │
+                               │  items/{barcode}/             │
+                               │    front-processed.jpg        │
+                               │    back-processed.jpg         │
+                               │                               │
+                               │  (public GET, auth'd PUT)     │
+                               └───────────────────────────────┘
+```
+
+---
+
 ## 1. Project context
 
 A Progressive Web App that closes the loop in Company I want to work for's add-items flow. A user scans a CPG barcode in the field; the app checks a global catalog; if photos are needed, the user captures them and they are background-removed and stored. Built as a weekend MVP to demonstrate the workflow to Company I want to work for's Head of Integrations.
@@ -437,7 +482,50 @@ Exactly four steps. Total target length: 2–3 minutes.
 
 ---
 
-## 16. General coding guidelines
+## 16. v2 Considerations
+
+> These are planned but out of scope for v1. Do not implement any of this without explicit instruction.
+
+### 16.1 Google OAuth + per-user identity
+
+Replace the shared `APP_PASSWORD` / `x-app-password` pattern with Google OAuth and session-based auth:
+
+- **New endpoints:** `GET /api/auth/google` (redirect to Google) and `GET /api/auth/callback` (exchange code → store session in Redis → set httpOnly cookie)
+- **`requireAuth` → `getAuthUser`:** reads session cookie, looks up `session:{token}` in Redis, returns `{ id, email }` or null. All existing routes swap `requireAuth` for `getAuthUser`.
+- **Session storage:** `session:{token}` key in Redis with appropriate TTL (e.g. 7 days).
+- **Logout:** delete Redis session key + clear cookie. Add `POST /api/auth/logout`.
+- **Frontend:** no password screen; redirect to `/api/auth/google` if no valid session. Remove `sessionStorage` password pattern.
+- **Library choice:** Clerk (React SDK + backend JWT, ~10 lines) vs. manual Google OAuth (~60 lines, zero new deps). Manual preferred to stay dependency-lean.
+
+### 16.2 Attribution on item records
+
+Add authorship to `ItemRecord` and photo entries:
+
+```ts
+// additions to ItemRecord
+created_by: string                    // Google user email or sub
+photos: Partial<Record<View, { url: string; captured_by: string }>>
+// replaces photo_urls: Partial<Record<View, string>>
+```
+
+- `created_by` stamped on first `POST /api/items/:barcode/photos` that creates the record.
+- `captured_by` stamped per view on each photo POST.
+- Existing v1 records without `created_by` treat it as optional (`created_by?: string`) to avoid breaking reads.
+
+### 16.3 Per-user rate limiting (new barcode scans)
+
+Limit: 3 new barcode lookups per user per day (counts only `exists: false` responses that hit the external Barcode Lookup API — cache hits and re-scans of known items don't count).
+
+Redis key pattern: `rl:new:{userId}:{YYYY-MM-DD}`
+
+Logic in `GET /api/items/:barcode`, before calling `lookupExternalProduct`:
+1. `INCR rl:new:{userId}:{today}` → get count
+2. On first write (`count === 1`), `EXPIREAT` to next UTC midnight
+3. If `count > 3`, return `429 { error: 'daily limit reached' }`
+
+---
+
+## 17. General coding guidelines
 
 > Behavioral guidelines to reduce common LLM coding mistakes. These bias toward caution over speed — use judgment on trivial tasks.
 
