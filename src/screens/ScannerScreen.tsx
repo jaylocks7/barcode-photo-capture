@@ -7,6 +7,7 @@ import type { GetItemResponse, ItemRecord } from '../types'
 type Props = {
   onScanResult: (barcode: string, result: GetItemResponse) => void
   onEditItem: (item: ItemRecord) => void
+  onRetakePhotos: (item: ItemRecord) => void
 }
 
 const hints = new Map()
@@ -18,7 +19,7 @@ hints.set(DecodeHintType.POSSIBLE_FORMATS, [
 ])
 hints.set(DecodeHintType.TRY_HARDER, true)
 
-export default function ScannerScreen({ onScanResult, onEditItem }: Props) {
+export default function ScannerScreen({ onScanResult, onEditItem, onRetakePhotos }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const lastBarcodeRef = useRef<string | null>(null)
   const handleBarcodeRef = useRef<(barcode: string) => void>(() => {})
@@ -91,6 +92,12 @@ export default function ScannerScreen({ onScanResult, onEditItem }: Props) {
                 className="text-sm text-blue-600"
               >
                 Edit
+              </button>
+              <button
+                onClick={() => { onRetakePhotos(completeBanner); setCompleteBanner(null) }}
+                className="text-sm text-blue-600"
+              >
+                Retake
               </button>
               <button
                 onClick={() => setCompleteBanner(null)}

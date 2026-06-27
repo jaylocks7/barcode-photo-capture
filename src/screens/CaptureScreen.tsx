@@ -9,11 +9,12 @@ type Props = {
   item: ItemRecord | null
   pendingName: string | null
   pendingPrice: number | null
+  isRetakeMode?: boolean
   onPhotoPosted: (updatedItem: ItemRecord) => void
   onComplete: () => void
 }
 
-export default function CaptureScreen({ barcode, item, pendingName, pendingPrice, onPhotoPosted }: Props) {
+export default function CaptureScreen({ barcode, item, pendingName, pendingPrice, isRetakeMode = false, onPhotoPosted, onComplete }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null)
@@ -21,11 +22,14 @@ export default function CaptureScreen({ barcode, item, pendingName, pendingPrice
   const [isBlurry, setIsBlurry] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [showTip, setShowTip] = useState(() => !sessionStorage.getItem('capture_tip_shown'))
+  const [retakeBlobs, setRetakeBlobs] = useState<Map<View, Blob>>(() => new Map())
+  const [retakeViewIndex, setRetakeViewIndex] = useState(0)
 
   const missingViews: View[] = item
     ? (item.required_views.filter(v => !(v in item.photo_urls)) as View[])
     : ['front']
-  const currentView = missingViews[0]
+  const retakeViews: View[] = item?.required_views ?? ['front', 'back']
+  const currentView: View = isRetakeMode ? retakeViews[retakeViewIndex] : missingViews[0]
   const itemName = pendingName ?? item?.name ?? 'Unknown Item'
   const displayPrice = pendingPrice ?? item?.price ?? null
 
@@ -75,8 +79,29 @@ export default function CaptureScreen({ barcode, item, pendingName, pendingPrice
 
     if (variance < 300) {
       setIsBlurry(true)
+    } else if (isRetakeMode) {
+      await handleRetakeCapture(blob, url)
     } else {
       await submitPhoto(blob, url)
+    }
+  }
+
+  async function handleRetakeCapture(blob: Blob, blobUrl: string) {
+    const newBlobs = new Map(retakeBlobs).set(currentView, blob)
+    if (retakeViewIndex < retakeViews.length - 1) {
+      setRetakeBlobs(newBlobs)
+      setRetakeViewIndex(retakeViewIndex + 1)
+      retake(blobUrl)
+    } else {
+      setIsProcessing(true)
+      try {
+        for (const [view, b] of newBlobs) {
+          await postPhoto(barcode, view, b, {})
+        }
+      } catch {}
+      retake(blobUrl)
+      setIsProcessing(false)
+      onComplete()
     }
   }
 

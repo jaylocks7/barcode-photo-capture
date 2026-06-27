@@ -19,6 +19,7 @@ export default function App() {
   const [pendingPrice, setPendingPrice] = useState<number | null>(null)
   const [wasNewItem, setWasNewItem] = useState(false)
   const [detailsReturnTo, setDetailsReturnTo] = useState<'capture' | 'scanner'>('capture')
+  const [isRetakeMode, setIsRetakeMode] = useState(false)
 
   function handleLogin() {
     setCurrentScreen('scanner')
@@ -37,6 +38,15 @@ export default function App() {
     }
     setDetailsReturnTo('capture')
     setCurrentScreen('details')
+  }
+
+  function handleRetakePhotos(retakeItem: ItemRecord) {
+    setBarcode(retakeItem.barcode)
+    setItem(retakeItem)
+    setPendingName(null)
+    setPendingPrice(null)
+    setIsRetakeMode(true)
+    setCurrentScreen('capture')
   }
 
   function handleEditItem(editItem: ItemRecord) {
@@ -92,6 +102,7 @@ export default function App() {
     setPendingName(null)
     setPendingPrice(null)
     setWasNewItem(false)
+    setIsRetakeMode(false)
     setCurrentScreen('scanner')
   }
 
@@ -99,7 +110,7 @@ export default function App() {
     return <LoginScreen onLogin={handleLogin} />
   }
   if (currentScreen === 'scanner') {
-    return <ScannerScreen onScanResult={handleScanResult} onEditItem={handleEditItem} />
+    return <ScannerScreen onScanResult={handleScanResult} onEditItem={handleEditItem} onRetakePhotos={handleRetakePhotos} />
   }
   if (currentScreen === 'details' && barcode) {
     return (
@@ -131,6 +142,7 @@ export default function App() {
         item={item}
         pendingName={pendingName}
         pendingPrice={pendingPrice}
+        isRetakeMode={isRetakeMode}
         onPhotoPosted={handlePhotoPosted}
         onComplete={handleCaptureComplete}
       />
