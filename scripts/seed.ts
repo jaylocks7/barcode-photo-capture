@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import { createClient } from 'redis'
 import type { ItemRecord } from '../src/types.ts'
 
