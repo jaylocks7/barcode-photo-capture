@@ -22,7 +22,6 @@ export default function CaptureScreen({ barcode, item, pendingName, pendingPrice
   const [isBlurry, setIsBlurry] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [showTip, setShowTip] = useState(() => !sessionStorage.getItem('capture_tip_shown'))
-  const [retakeBlobs, setRetakeBlobs] = useState<Map<View, Blob>>(() => new Map())
   const [retakeViewIndex, setRetakeViewIndex] = useState(0)
 
   const missingViews: View[] = item
@@ -87,18 +86,15 @@ export default function CaptureScreen({ barcode, item, pendingName, pendingPrice
   }
 
   async function handleRetakeCapture(blob: Blob, blobUrl: string) {
-    const newBlobs = new Map(retakeBlobs).set(currentView, blob)
+    setIsProcessing(true)
+    try {
+      await postPhoto(barcode, currentView, blob, {})
+    } catch {}
     if (retakeViewIndex < retakeViews.length - 1) {
-      setRetakeBlobs(newBlobs)
       setRetakeViewIndex(retakeViewIndex + 1)
       retake(blobUrl)
+      setIsProcessing(false)
     } else {
-      setIsProcessing(true)
-      try {
-        for (const [view, b] of newBlobs) {
-          await postPhoto(barcode, view, b, {})
-        }
-      } catch {}
       retake(blobUrl)
       setIsProcessing(false)
       onComplete()
